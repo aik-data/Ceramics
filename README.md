@@ -15,7 +15,9 @@ An online gallery for the school's student ceramics fundraiser. Families browse 
 | New-order emails | Supabase Edge Function `supabase/functions/order-notify` + Resend |
 | Admin invites | Supabase Edge Function `supabase/functions/admin-users` |
 
-**Demo mode:** while `site/js/config.js` has no Supabase settings, the site runs on sample data saved in your browser.
+**Status:** connected to the Supabase project `ceramics-fundraiser`. The schema, family login, first admin and both edge functions are set up.
+
+**Demo mode:** if you blank out `supabaseUrl` in `site/js/config.js`, the site runs on sample data saved in your browser instead.
 
 - Family password: `clay`
 - Admin: any email, password `demo`
@@ -33,7 +35,7 @@ cd site && python3 -m http.server 8000
 2. Merge this work into `main`. The workflow in `.github/workflows/pages.yml` deploys `site/` automatically on every push to `main` that changes the site.
 3. The site will be at `https://aik-data.github.io/Ceramics/` (admin portal at `/admin.html`).
 
-## Connect Supabase (go live)
+## Connect Supabase (reference — already done for this project)
 
 1. **Create a project** at supabase.com (the free tier is fine).
 2. **Run the schema:** open the SQL Editor, paste in `supabase/migrations/20261119000000_init.sql`, and run it. Or use `supabase db push` with the Supabase CLI.

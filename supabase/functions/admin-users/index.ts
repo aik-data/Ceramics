@@ -3,7 +3,18 @@
 // Optional secret: SITE_URL (where the invite link lands).
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { corsHeaders, json } from "../_shared/cors.ts";
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -24,7 +35,7 @@ Deno.serve(async (req) => {
     if (body.action === "invite") {
       const email = String(body.email ?? "").trim().toLowerCase();
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "Invalid email" }, 400);
-      const siteUrl = (Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "");
+      const siteUrl = (Deno.env.get("SITE_URL") ?? "https://aik-data.github.io/Ceramics").replace(/\/$/, "");
 
       let userId: string | undefined;
       const invited = await service.auth.admin.inviteUserByEmail(email, {

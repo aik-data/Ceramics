@@ -567,6 +567,16 @@ function viewSettings() {
       <button class="btn" type="submit">Update family password</button>
     </form>
 
+    <form class="panel settings-section" id="set-mypw">
+      <h2>My password</h2>
+      <p class="muted small">Change the password you use to sign in to this admin portal (${esc(me.email)}).</p>
+      <div class="grid-2" style="max-width:620px">
+        <div class="field"><label for="mypw">New password</label><input id="mypw" type="password" minlength="8" autocomplete="new-password" required></div>
+        <div class="field"><label for="mypw2">Confirm new password</label><input id="mypw2" type="password" minlength="8" autocomplete="new-password" required></div>
+      </div>
+      <button class="btn" type="submit">Change my password</button>
+    </form>
+
     <section class="panel settings-section">
       <h2>Admins</h2>
       <table class="list" style="margin-bottom:14px"><tbody>
@@ -595,6 +605,13 @@ function viewSettings() {
   document.getElementById("set-family").addEventListener("submit", async (e) => {
     e.preventDefault();
     try { await api.setFamilyPassword(val("fpw")); toast("Family password updated", "ok"); e.target.reset(); }
+    catch (err) { toast(friendlyError(err), "error"); }
+  });
+  document.getElementById("set-mypw").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (val("mypw").length < 8) return toast("Use at least 8 characters.", "error");
+    if (val("mypw") !== val("mypw2")) return toast("The two passwords don't match.", "error");
+    try { await api.setOwnPassword(val("mypw")); toast("Your password was changed", "ok"); e.target.reset(); }
     catch (err) { toast(friendlyError(err), "error"); }
   });
   document.getElementById("invite").addEventListener("submit", async (e) => {

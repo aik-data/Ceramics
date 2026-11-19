@@ -221,6 +221,7 @@ declare
   v_avail   int;
   v_pickup  public.pickup_options;
   v_label   text;
+  v_cart    jsonb := '[]'::jsonb;
 begin
   if not public.is_member() then
     raise exception 'NOT_SIGNED_IN' using errcode = '28000';
@@ -248,8 +249,6 @@ begin
   v_label := v_pickup.label;
 
   -- 1) Lock pieces in a stable order (avoids deadlocks) and check stock.
-  create temp table if not exists _cart (piece_id uuid, qty int, suggested_cents int, title text, artist text) on commit drop;
-  delete from _cart;
   for v_item in
     select (i->>'piece_id')::uuid as piece_id, sum((i->>'qty')::int)::int as qty
       from jsonb_array_elements(p->'items') i
@@ -266,7 +265,8 @@ begin
     if v_item.qty > v_avail then
       raise exception 'NOT_AVAILABLE:%', v_piece.title;
     end if;
-    insert into _cart values (v_piece.id, v_item.qty, v_piece.suggested_cents, v_piece.title, v_piece.artist);
+    v_cart := v_cart || jsonb_build_object('piece_id', v_piece.id, 'qty', v_item.qty,
+      'suggested_cents', v_piece.suggested_cents, 'title', v_piece.title, 'artist', v_piece.artist);
   end loop;
 
   -- 2) Create the order (only now, so failed checkouts don't use up order numbers).
@@ -278,7 +278,8 @@ begin
   returning * into v_order;
 
   insert into public.order_items (order_id, piece_id, qty, suggested_cents, title, artist)
-  select v_order.id, piece_id, qty, suggested_cents, title, artist from _cart;
+  select v_order.id, c.piece_id, c.qty, c.suggested_cents, c.title, c.artist
+    from jsonb_to_recordset(v_cart) as c(piece_id uuid, qty int, suggested_cents int, title text, artist text);
 
   return json_build_object('order_id', v_order.id, 'order_no', v_order.order_no);
 end;
@@ -339,6 +340,8 @@ on conflict (id) do nothing;
 
 create policy photos_admin_insert on storage.objects for insert to authenticated
   with check (bucket_id = 'photos' and public.is_admin());
+create policy photos_admin_select on storage.objects for select to authenticated
+  using (bucket_id = 'photos' and public.is_admin());
 create policy photos_admin_update on storage.objects for update to authenticated
   using (bucket_id = 'photos' and public.is_admin());
 create policy photos_admin_delete on storage.objects for delete to authenticated
