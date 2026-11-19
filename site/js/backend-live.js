@@ -2,9 +2,14 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { resizeImage, saleState } from "./util.js";
 
-export function createLiveBackend({ supabaseUrl, supabaseAnonKey }) {
+export function createLiveBackend({ supabaseUrl, supabaseAnonKey, area = "family" }) {
+  // The admin portal and the family site keep separate logins, so signing in
+  // with the family password never signs an admin out (and vice versa).
   const sb = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    auth: {
+      persistSession: true, autoRefreshToken: true, detectSessionInUrl: area === "admin",
+      storageKey: area === "admin" ? "ceramics-admin-auth" : "ceramics-family-auth",
+    },
   });
 
   let publicInfo = null;

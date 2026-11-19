@@ -83,6 +83,7 @@ export function friendlyError(e) {
   if (m.includes("EMPTY_CART")) return "Your cart is empty.";
   if (m.includes("NOT_SIGNED_IN")) return "Please sign in again.";
   if (m.includes("Invalid login")) return "That password didn't work. Please try again.";
+  if (m.includes("row-level security") || m.includes("NOT_ADMIN")) return "Your admin sign-in has expired or been replaced. Please sign out and sign in again.";
   if (m.includes("PASSWORD_TOO_SHORT")) return "Passwords need at least 6 characters.";
   return m || "Something went wrong. Please try again.";
 }
