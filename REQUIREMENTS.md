@@ -1,6 +1,6 @@
 # Ceramics Fundraiser Website — Requirements
 
-Status: **Draft for review** · Last updated: 2026-11-19
+Status: **Approved for build** · Last updated: 2026-11-19
 
 ## 1. Goal
 
@@ -31,7 +31,7 @@ There is no separate volunteer role. Everything behind the scenes is done by adm
 | 8 | Look and feel | **Modern, clean art gallery** |
 | 9 | Extra giving | A **Donate** button that goes straight to FutureFund. No item and no invoice needed |
 | 10 | Sale dates | Open and close dates are **admin settings**, and the site follows them automatically |
-| 11 | Extras | Student artist names, a fundraiser goal with a progress bar, pickup dates and times set by admins |
+| 11 | Extras | Student artist name (name only), a fundraiser goal with a progress bar, pickup dates and times set by admins |
 | 12 | Admin | New-order alerts (email + dashboard), profit / money-raised totals (no detailed cost entry), downloadable reports |
 
 ## 4. Family-facing site
@@ -53,7 +53,7 @@ There is no separate volunteer role. Everything behind the scenes is done by adm
 
 ### 4.3 Piece detail page
 - One to four photos, with zoom.
-- Title, **artist credit** (first name + last initial, plus grade, e.g. "Maya R., Grade 4"), and an optional short description.
+- Title, **artist name** (entered by the admin exactly as it should appear), and an optional short description.
 - Suggested donation.
 - For multiples: the quantity still available, and a quantity selector.
 - An "Add to cart" button.
@@ -77,7 +77,7 @@ There is no separate volunteer role. Everything behind the scenes is done by adm
 ### 4.5 Donate (extra giving)
 - Families can give an extra donation **without buying a piece and without an invoice**.
 - A **"Make a donation"** button appears in the header, on the home page, and on the checkout confirmation page.
-- It opens the school's **FutureFund donation page** directly. The link is set in admin settings.
+- It opens the school's **FutureFund donation page** directly. The link is set in admin settings. *Until the school's donation page exists, it points to the FutureFund home page.*
 - The site never sees these payments. To count a donation toward the goal, an admin records it in the dashboard (§6.4).
 
 ### 4.6 Sale dates
@@ -87,7 +87,7 @@ There is no separate volunteer role. Everything behind the scenes is done by adm
 - **After the sale closes:** families can still browse the gallery and use the Donate button, but they can't check out. A banner shows "The sale has ended — thank you!"
 
 ### 4.7 Privacy
-- Student credits show first name + last initial only, with an optional grade.
+- Pieces are credited with the artist's name only. No grade or class is shown.
 - No photos of students.
 - Family names, emails and phone numbers are visible only to admins.
 
@@ -138,11 +138,11 @@ Family checks out ──► NEW ──► INVOICE SENT ──► PAID
 - **Mark paid:** the admin enters the **amount actually received** in FutureFund. It defaults to the invoiced total and can be edited if the payment was different. The pieces become **Sold**.
 - **Release:** cancels the order or part of it and puts those pieces back on sale. The admin can choose to email the family.
 - **Edit order:** remove an item or change a quantity, for example when a family changes their mind.
-- **Overdue flag:** an order shows as overdue if it has stayed in *Invoice sent* longer than the reminder period in settings (default: 3 days), so the admin can follow up. Pieces are **never released automatically**. Only an admin can release them.
+- **Overdue flag:** an order shows as overdue if it has stayed in *Invoice sent* longer than the reminder period in settings (default: **48 hours**), so the admin can follow up. Pieces are **never released automatically**. Only an admin can release them.
 - An activity log records which admin did what and when.
 
 ### 6.3 Listings
-- Add, edit, or hide a piece: photos, title, artist name, grade, description, category, suggested donation, quantity.
+- Add, edit, or hide a piece: photos, title, artist name, description, category, suggested donation, quantity.
 - Photos are resized and compressed automatically.
 - Optional: import listings from a simple spreadsheet (CSV) to speed up the initial setup.
 
@@ -165,11 +165,11 @@ Family checks out ──► NEW ──► INVOICE SENT ──► PAID
   - Example: "Spring Concert — Thu May 14, 6:00–7:30 PM, School Gym"
   - Example: "Send home with my student"
   - Only active options appear at checkout.
-- **Admin notification emails:** who receives new-order emails.
+- **Admin notification emails:** who receives new-order emails. *(For now, the owner's email. It is set in the admin settings and is not stored in the public code repository.)*
 - **Admin users:** invite or remove admins.
 - **Family password.**
 - **Fundraiser goal amount.**
-- **Overdue reminder period:** in days.
+- **Overdue reminder period:** in hours (default 48).
 - **Total expenses:** optional.
 - **Sale dates:** the date and time the sale opens and the date and time it closes, in the school's time zone. The site switches between Coming soon, Open and Closed on its own.
   - **Pause checkout:** an override that stops checkout early or temporarily, whatever the dates say.
@@ -182,6 +182,8 @@ Family checks out ──► NEW ──► INVOICE SENT ──► PAID
 - **Open orders:** New and Invoice sent orders, with how long each has been waiting.
 - **Inventory:** every piece with its status and remaining quantity.
 
+After the sale closes, there is no special process for unsold pieces. They simply stay unsold.
+
 ## 7. Look and feel
 
 - A modern, clean art gallery: a neutral off-white background, generous spacing, large photos, and refined typography with no clutter. The pieces provide the color.
@@ -189,21 +191,25 @@ Family checks out ──► NEW ──► INVOICE SENT ──► PAID
 - Mobile-first, since most parents will browse on their phones.
 - Accessible: readable contrast, alt text on photos, and keyboard-friendly controls.
 
-## 8. Technical approach (recommended)
+## 8. Technical approach
 
-- **Hosting:** a small web app on a free or low-cost host (Netlify or Vercel).
-- **Database, photo storage, and admin logins:** a hosted backend such as Supabase (free tier). Its database lets checkout reserve inventory reliably, so there are no double sales.
-- **Email:** a transactional email service (e.g. Resend or Postmark) for family confirmations and admin new-order alerts.
-- **FutureFund:** used only by admins to send invoices and collect payment. FutureFund offers no public API, so invoices are created by hand and payments are confirmed by hand. The "Copy invoice details" button keeps that quick.
-- **Expected cost:** $0–$20 for the whole fundraiser, plus a custom domain if you want one.
+| Part | Choice | Why |
+|------|--------|-----|
+| Website hosting | **GitHub Pages** (free), deployed from this repo | The site is plain HTML/CSS/JS, so no build step or server is needed |
+| Database, admin logins, photo storage | **Supabase** (free tier) | GitHub Pages can only serve files. It has no database, no private data, and no logins. Supabase provides all three, plus the locking that stops two families buying the same piece |
+| Emails | **Supabase Edge Function + Resend** (free tier) | Sends the family confirmation and the admin new-order alert. The API key stays secret on Supabase |
+| FutureFund | Linked only | Admins send invoices and families pay there. FutureFund offers no public API, so invoices and payment confirmations are done by hand |
 
-## 9. Open questions
+- **Family password:** a single shared Supabase login. Families only type the password, and the site remembers it on that device.
+- **Data privacy:** the repository is public, so it holds **code only**. Family details, orders and admin emails live in Supabase, protected by row-level security. The Supabase "anon" key in the code is designed to be public.
+- **Demo mode:** if Supabase isn't connected yet, the site runs on sample data stored in the browser. That lets the GitHub Page be previewed right away.
+- **Expected cost:** $0 on the free tiers. A custom domain is optional (about $12/year).
 
-1. **FutureFund donation page:** does the school already have a FutureFund page where families can give any amount? If not, one needs to be set up for the Donate button.
-2. **Overdue period:** is 3 days after the invoice is sent the right time to flag an order for follow-up?
-3. **Artist credit:** is grade enough, or should teacher/class also appear publicly?
-4. **Unclaimed pieces after the sale:** offer them to the student's family first, or hold a second round?
-5. **Account ownership:** which school email should own the hosting, database and email accounts, so they outlast any one admin?
+## 9. Open items
+
+1. **FutureFund donation page:** the school will add it later. Until then, the Donate button links to the FutureFund home page.
+2. **Admin email:** the final admin email will be provided. The owner's email is used for now.
+3. **Resend sending domain:** to email families (not just the admin), Resend needs a verified sending domain, such as the school's domain or a cheap custom one.
 
 ## 10. Out of scope (for now)
 
