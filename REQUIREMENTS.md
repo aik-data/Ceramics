@@ -24,13 +24,15 @@ There is no separate volunteer role. Everything behind the scenes is done by adm
 | 1 | Piece types | **A mix:** one-of-a-kind pieces (quantity 1) alongside items that come in multiples |
 | 2 | Size | **Under 50 listings** |
 | 3 | Who can view | **School families only**, behind one shared password |
-| 4 | Pricing | **Suggested donations:** each piece shows a suggested amount, and families may give more |
+| 4 | Pricing | **Suggested donations:** each piece shows a suggested amount, which is what the invoice charges |
 | 5 | Buying flow | **Check out → admin is notified → admin sends a FutureFund invoice → family pays** |
 | 6 | Double sales | Pieces are **held** from checkout until the admin marks them paid or releases them |
 | 7 | Upkeep | **Admins confirm each payment by hand** against FutureFund |
 | 8 | Look and feel | **Modern, clean art gallery** |
-| 9 | Extras | Student artist names, a fundraiser goal with a progress bar, pickup dates and times set by admins |
-| 10 | Admin | New-order alerts (email + dashboard), profit / money-raised totals (no detailed cost entry), downloadable reports |
+| 9 | Extra giving | A **Donate** button that goes straight to FutureFund. No item and no invoice needed |
+| 10 | Sale dates | Open and close dates are **admin settings**, and the site follows them automatically |
+| 11 | Extras | Student artist names, a fundraiser goal with a progress bar, pickup dates and times set by admins |
+| 12 | Admin | New-order alerts (email + dashboard), profit / money-raised totals (no detailed cost entry), downloadable reports |
 
 ## 4. Family-facing site
 
@@ -52,7 +54,7 @@ There is no separate volunteer role. Everything behind the scenes is done by adm
 ### 4.3 Piece detail page
 - One to four photos, with zoom.
 - Title, **artist credit** (first name + last initial, plus grade, e.g. "Maya R., Grade 4"), and an optional short description.
-- Suggested donation, with a note that families may give more.
+- Suggested donation.
 - For multiples: the quantity still available, and a quantity selector.
 - An "Add to cart" button.
 
@@ -70,9 +72,21 @@ There is no separate volunteer role. Everything behind the scenes is done by adm
   2. The family sees a confirmation page with an **order number** (e.g. `CER-1042`) and gets a confirmation email. It lists the pieces, the suggested total and the pickup choice, and says: *"You'll receive an invoice from FutureFund shortly. Your pieces are reserved for you."*
   3. **The admins get an email** about the new order (§5).
   4. **The order appears in the admin dashboard** as a new order (§6.2).
-- Families do **not** pay on the site and do **not** get a direct FutureFund link. They pay the invoice the admin sends.
+- Families do **not** pay for pieces on the site. They pay the invoice the admin sends. (Extra giving is separate. See §4.5.)
 
-### 4.5 Privacy
+### 4.5 Donate (extra giving)
+- Families can give an extra donation **without buying a piece and without an invoice**.
+- A **"Make a donation"** button appears in the header, on the home page, and on the checkout confirmation page.
+- It opens the school's **FutureFund donation page** directly. The link is set in admin settings.
+- The site never sees these payments. To count a donation toward the goal, an admin records it in the dashboard (§6.4).
+
+### 4.6 Sale dates
+- The sale opens and closes automatically, using the dates and times the admins set (§6.5).
+- **Before the sale opens:** families see a "Coming soon — sale opens [date/time]" page with the fundraiser intro. Admins can still see everything.
+- **While the sale is open:** browsing and checkout both work.
+- **After the sale closes:** families can still browse the gallery and use the Donate button, but they can't check out. A banner shows "The sale has ended — thank you!"
+
+### 4.7 Privacy
 - Student credits show first name + last initial only, with an optional grade.
 - No photos of students.
 - Family names, emails and phone numbers are visible only to admins.
@@ -119,9 +133,9 @@ Family checks out ──► NEW ──► INVOICE SENT ──► PAID
   - the suggested total
   - the pickup choice and notes
   - how long the order has been waiting
-- **Copy invoice details:** one click copies a ready-to-paste summary for creating the FutureFund invoice. It has the family name and email, the order number, the list of items and the suggested total.
+- **Copy invoice details:** one click copies a ready-to-paste summary for creating the FutureFund invoice. It has the family name and email, the list of items and the suggested total. The **order number goes in the invoice memo**, so the payment can be matched to the order.
 - **Mark invoice sent:** records the date the invoice was sent.
-- **Mark paid:** the admin enters the **amount actually received** in FutureFund. It defaults to the suggested total and can be edited, since families may give more. The pieces become **Sold**.
+- **Mark paid:** the admin enters the **amount actually received** in FutureFund. It defaults to the invoiced total and can be edited if the payment was different. The pieces become **Sold**.
 - **Release:** cancels the order or part of it and puts those pieces back on sale. The admin can choose to email the family.
 - **Edit order:** remove an item or change a quantity, for example when a family changes their mind.
 - **Overdue flag:** an order shows as overdue if it has stayed in *Invoice sent* longer than the reminder period in settings (default: 3 days), so the admin can follow up. Pieces are **never released automatically**. Only an admin can release them.
@@ -138,9 +152,12 @@ Family checks out ──► NEW ──► INVOICE SENT ──► PAID
 
 ### 6.4 Dashboard: money raised
 - **New orders** alert box (§5).
-- **Total raised:** the sum of confirmed amounts received. This also drives the public progress bar.
-- **Awaiting payment:** the suggested total of orders that are New or Invoice sent.
-- Pieces sold vs. available, and the number of donations above the suggested amount.
+- **Total raised** = paid orders + recorded donations. This also drives the public progress bar.
+  - **Sales:** the sum of amounts received on paid orders.
+  - **Donations:** the sum of donations an admin recorded.
+- **Record donation:** for donations made through the FutureFund donation page. The admin enters the amount, the date, and optionally a name and note. Recorded donations can be edited or deleted. Admins can enter each donation separately, or one running total copied from FutureFund.
+- **Awaiting payment:** the invoiced total of orders that are New or Invoice sent.
+- Pieces sold vs. available.
 - **Profit:** no per-item cost tracking. The dashboard shows total raised. An optional single "total expenses" field gives **net profit = total raised − expenses**.
 
 ### 6.5 Settings (admin-managed)
@@ -154,10 +171,13 @@ Family checks out ──► NEW ──► INVOICE SENT ──► PAID
 - **Fundraiser goal amount.**
 - **Overdue reminder period:** in days.
 - **Total expenses:** optional.
-- **Sale open/closed:** when closed, families can browse but not check out.
+- **Sale dates:** the date and time the sale opens and the date and time it closes, in the school's time zone. The site switches between Coming soon, Open and Closed on its own.
+  - **Pause checkout:** an override that stops checkout early or temporarily, whatever the dates say.
+- **FutureFund donation link:** the page the Donate button opens.
 
 ### 6.6 Reports (CSV download)
 - **Sales:** each paid order, with pieces, artist, family, amount received, and date.
+- **Donations:** each recorded donation.
 - **Pickup list:** grouped by pickup date and time, then by teacher/class, for packing and handing out.
 - **Open orders:** New and Invoice sent orders, with how long each has been waiting.
 - **Inventory:** every piece with its status and remaining quantity.
@@ -179,16 +199,15 @@ Family checks out ──► NEW ──► INVOICE SENT ──► PAID
 
 ## 9. Open questions
 
-1. **FutureFund invoices:** can an invoice let the family pay *more* than the invoiced amount, or does it need a separate donation line? Can the order number go in the invoice memo?
+1. **FutureFund donation page:** does the school already have a FutureFund page where families can give any amount? If not, one needs to be set up for the Donate button.
 2. **Overdue period:** is 3 days after the invoice is sent the right time to flag an order for follow-up?
-3. **Sale window:** what are the open and close dates? Should admins preview the site before families get the password?
-4. **Artist credit:** is grade enough, or should teacher/class also appear publicly?
-5. **Unclaimed pieces after the sale:** offer them to the student's family first, or hold a second round?
-6. **Account ownership:** which school email should own the hosting, database and email accounts, so they outlast any one admin?
+3. **Artist credit:** is grade enough, or should teacher/class also appear publicly?
+4. **Unclaimed pieces after the sale:** offer them to the student's family first, or hold a second round?
+5. **Account ownership:** which school email should own the hosting, database and email accounts, so they outlast any one admin?
 
 ## 10. Out of scope (for now)
 
-- Taking payments on the site. All payments go through FutureFund invoices.
+- Taking payments on the site. Pieces are paid by FutureFund invoice, and extra donations through the FutureFund donation page.
 - Family accounts and order history.
 - Automatic FutureFund syncing.
 - Auctions or bidding.
