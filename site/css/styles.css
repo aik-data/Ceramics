@@ -80,6 +80,7 @@ input[type=date], input[type=time], input[type=datetime-local], input[type=url],
   border-radius: var(--radius); background: var(--surface);
 }
 textarea { min-height: 90px; resize: vertical; }
+[aria-invalid=true] { border-color: var(--bad) !important; background: #fdf6f5; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px rgba(29,28,26,.08); }
 .check { display: flex; align-items: center; gap: 10px; font-weight: 400; cursor: pointer; }
 .check input { width: 18px; height: 18px; accent-color: var(--ink); }

@@ -7,6 +7,7 @@ const CART_KEY = "ceramics-cart";
 const LAST_ORDER_KEY = "ceramics-last-order";
 
 let api, info, gallery = null, filter = "all";
+let draft = {}; // what the family has typed into the checkout form (survives re-renders)
 
 // ───── Cart (saved on this device) ─────
 const cart = {
@@ -203,7 +204,7 @@ function viewCart(error = "") {
   document.title = `Cart — ${info.fundraiser_name}`;
   const items = cart.get().map((i) => ({ ...i, p: pieceById(i.piece_id) })).filter((i) => i.p);
   const total = items.reduce((s, i) => s + i.qty * i.p.suggested_cents, 0);
-  const saved = (() => { try { return JSON.parse(localStorage.getItem("ceramics-contact") || "{}"); } catch { return {}; } })();
+  const saved = { ...(() => { try { return JSON.parse(localStorage.getItem("ceramics-contact") || "{}"); } catch { return {}; } })(), ...draft };
 
   if (!items.length) {
     app.innerHTML = shell(`<div class="wrap page"><div class="empty">${error ? `<p class="note note-warn" role="alert" style="max-width:520px;margin:0 auto 24px">${esc(error)}</p>` : ""}<h2>Your cart is empty</h2><p>Browse the gallery and add the pieces you love.</p><a class="btn" href="#/">Browse the gallery</a></div></div>`);
@@ -246,8 +247,8 @@ function viewCart(error = "") {
           </select>
           <div class="hint" id="pickup-note"></div>
         </div>
-        <div class="field"><label for="notes">Notes <span class="muted small">(optional)</span></label><textarea id="notes" rows="3"></textarea></div>
-        ${error ? `<p class="note note-bad" role="alert">${esc(error)}</p>` : ""}
+        <div class="field"><label for="notes">Notes <span class="muted small">(optional)</span></label><textarea id="notes" rows="3">${esc(saved.notes)}</textarea></div>
+        <p class="note note-bad ${error ? "" : "hidden"}" role="alert" id="form-error">${esc(error)}</p>
         ${canCheckout()
           ? `<button class="btn btn-accent btn-block" type="submit">Place order · ${money(total)}</button>`
           : `<p class="note note-warn">Ordering is closed right now.</p>`}
@@ -257,6 +258,17 @@ function viewCart(error = "") {
   const sel = document.getElementById("pickup");
   const showNote = () => { const o = opts.find((x) => x.id === sel.value); document.getElementById("pickup-note").textContent = o?.note ?? ""; };
   sel.addEventListener("change", showNote); showNote();
+
+  // Remember everything typed, so nothing is lost if the cart re-renders.
+  const form = document.getElementById("checkout");
+  const remember = (e) => {
+    const el = e.target;
+    if (!el.id) return;
+    draft[el.id] = el.value;
+    if (el.value.trim()) el.removeAttribute("aria-invalid");
+  };
+  form.addEventListener("input", remember);
+  form.addEventListener("change", remember);
 
   document.getElementById("checkout").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -268,7 +280,23 @@ function viewCart(error = "") {
       items: cart.get().map(({ piece_id, qty }) => ({ piece_id, qty })),
     };
     const missing = ["parent_name", "email", "student_name", "student_class", "pickup"].filter((k) => !f(k));
-    if (missing.length) { viewCart("Please fill in all required fields."); document.getElementById(missing[0])?.focus(); return; }
+    form.querySelectorAll("[aria-invalid]").forEach((el) => el.removeAttribute("aria-invalid"));
+    const errBox = document.getElementById("form-error");
+    if (missing.length) {
+      missing.forEach((k) => document.getElementById(k).setAttribute("aria-invalid", "true"));
+      errBox.textContent = "Please fill in the fields marked in red.";
+      errBox.classList.remove("hidden");
+      document.getElementById(missing[0]).focus();
+      return;
+    }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(order.email)) {
+      document.getElementById("email").setAttribute("aria-invalid", "true");
+      errBox.textContent = "Please check the email address.";
+      errBox.classList.remove("hidden");
+      document.getElementById("email").focus();
+      return;
+    }
+    errBox.classList.add("hidden");
     try { localStorage.setItem("ceramics-contact", JSON.stringify({ ...order, pickup: order.pickup_option_id, items: undefined, notes: undefined })); } catch {}
 
     const btn = e.target.querySelector("button[type=submit]");
@@ -282,6 +310,7 @@ function viewCart(error = "") {
       };
       try { sessionStorage.setItem(LAST_ORDER_KEY, JSON.stringify(summary)); } catch {}
       cart.set([]);
+      draft = {};
       await loadGallery();
       location.hash = `#/thanks/${encodeURIComponent(res.order_no)}`;
     } catch (err) {
