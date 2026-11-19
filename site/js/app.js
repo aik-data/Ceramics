@@ -234,7 +234,7 @@ function viewCart(error = "") {
       <form class="panel" id="checkout" novalidate>
         <h2 style="font-size:1.5rem">Check out</h2>
         <div class="field"><label for="parent_name">Parent / guardian name <span class="req">*</span></label><input id="parent_name" type="text" autocomplete="name" required value="${esc(saved.parent_name)}"></div>
-        <div class="field"><label for="email">Email <span class="req">*</span></label><input id="email" type="email" autocomplete="email" required value="${esc(saved.email)}"><div class="hint">Your FutureFund invoice and confirmation go here.</div></div>
+        <div class="field"><label for="email">Email <span class="req">*</span></label><input id="email" type="email" autocomplete="email" required value="${esc(saved.email)}"><div class="hint">Your FutureFund invoice will be sent here.</div></div>
         <div class="field"><label for="phone">Phone <span class="muted small">(optional)</span></label><input id="phone" type="tel" autocomplete="tel" value="${esc(saved.phone)}"></div>
         <div class="grid-2">
           <div class="field"><label for="student_name">Student name <span class="req">*</span></label><input id="student_name" type="text" required value="${esc(saved.student_name)}"></div>
@@ -330,7 +330,7 @@ function viewThanks(orderNo) {
   app.innerHTML = shell(`<div class="wrap page" style="max-width:720px">
     <div class="eyebrow">Order ${esc(s.order_no)}</div>
     <h1>Thank you!</h1>
-    <p class="lead muted" style="font-size:1.1rem">Your pieces are reserved for you.${s.email ? ` A confirmation is on its way to <strong>${esc(s.email)}</strong>.` : ""}</p>
+    <p class="lead muted" style="font-size:1.1rem">Your pieces are reserved for you.${s.email ? ` Your FutureFund invoice will be sent to <strong>${esc(s.email)}</strong>.` : ""} Please keep your order number for your records.</p>
     <div class="panel" style="margin:26px 0">
       <h3>What happens next</h3>
       <ol style="padding-left:20px;margin:0">

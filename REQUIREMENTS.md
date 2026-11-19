@@ -69,7 +69,7 @@ There is no separate volunteer role. Everything behind the scenes is done by adm
   - Notes (optional)
 - When they place the order:
   1. The pieces go **On hold** right away. Two families can never get the last unit of the same piece, even if they check out at the same moment.
-  2. The family sees a confirmation page with an **order number** (e.g. `CER-1042`) and gets a confirmation email. It lists the pieces, the suggested total and the pickup choice, and says: *"You'll receive an invoice from FutureFund shortly. Your pieces are reserved for you."*
+  2. The family sees a confirmation page with an **order number** (e.g. `CER-1042`) listing the pieces, the suggested total and the pickup choice, with the message: *"Your pieces are reserved for you. Your FutureFund invoice will be sent to [email]."* No confirmation email is sent to families; the admin's FutureFund invoice is their written confirmation.
   3. **The admins get an email** about the new order (§5).
   4. **The order appears in the admin dashboard** as a new order (§6.2).
 - Families do **not** pay for pieces on the site. They pay the invoice the admin sends. (Extra giving is separate. See §4.5.)
@@ -197,7 +197,7 @@ After the sale closes, there is no special process for unsold pieces. They simpl
 |------|--------|-----|
 | Website hosting | **GitHub Pages** (free), deployed from this repo | The site is plain HTML/CSS/JS, so no build step or server is needed |
 | Database, admin logins, photo storage | **Supabase** (free tier) | GitHub Pages can only serve files. It has no database, no private data, and no logins. Supabase provides all three, plus the locking that stops two families buying the same piece |
-| Emails | **Supabase Edge Function + Resend** (free tier) | Sends the family confirmation and the admin new-order alert. The API key stays secret on Supabase |
+| Emails | **Supabase Edge Function + Resend** (free tier) | Sends the admin new-order alert only, from Resend's shared address (`onboarding@resend.dev`), so no domain is needed. The Resend account must use the admin's email. The API key stays secret on Supabase |
 | FutureFund | Linked only | Admins send invoices and families pay there. FutureFund offers no public API, so invoices and payment confirmations are done by hand |
 
 - **Family password:** a single shared Supabase login. Families only type the password, and the site remembers it on that device.
@@ -209,7 +209,6 @@ After the sale closes, there is no special process for unsold pieces. They simpl
 
 1. **FutureFund donation page:** the school will add it later. Until then, the Donate button links to the FutureFund home page.
 2. **Admin email:** the final admin email will be provided. The owner's email is used for now.
-3. **Resend sending domain:** to email families (not just the admin), Resend needs a verified sending domain, such as the school's domain or a cheap custom one.
 
 ## 10. Out of scope (for now)
 

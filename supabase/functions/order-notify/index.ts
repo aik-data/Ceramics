@@ -1,10 +1,13 @@
-// Sends the new-order emails (admin alert + family confirmation) once per order.
-// Called by the site right after place_order succeeds.
+// Emails the admin(s) about each new order, once per order.
+// Called by the site right after place_order succeeds. Families get no email;
+// the admin sends them a FutureFund invoice by hand.
 //
-// Secrets (supabase secrets set ...):
+// Secrets (Supabase → Edge Functions → Secrets):
 //   RESEND_API_KEY  – from resend.com (free tier)
-//   FROM_EMAIL      – e.g. "Ceramics Sale <sale@yourschool.org>" (domain verified in Resend)
-//   SITE_URL        – e.g. "https://aik-data.github.io/Ceramics"
+//   FROM_EMAIL      – optional. Defaults to Resend's shared "onboarding@resend.dev",
+//                     which needs no domain but can only deliver to the email
+//                     address that owns the Resend account.
+//   SITE_URL        – optional, defaults to the GitHub Pages address
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -86,20 +89,14 @@ Deno.serve(async (req) => {
         style="background:#1d1c1a;color:#fff;padding:10px 18px;text-decoration:none;border-radius:4px">Open in admin dashboard</a></p>
       <p style="color:#777;font-size:13px">Put <strong>${esc(order.order_no)}</strong> in the FutureFund invoice memo.</p>`);
 
-    const familyHtml = wrap(`
-      <h2 style="font-weight:500">Thank you, ${esc(order.parent_name.split(" ")[0])}!</h2>
-      <p>Your order <strong>${esc(order.order_no)}</strong> for the ${esc(settings.fundraiser_name)} is in, and your pieces are reserved for you.</p>
-      ${table}
-      <p><strong>What happens next:</strong> you'll receive an invoice from FutureFund shortly. The order number ${esc(order.order_no)} will be in the memo.</p>
-      <p>Pickup: ${esc(order.pickup_label)}</p>
-      <p style="color:#777;font-size:13px">Want to give a little extra? <a href="${esc(settings.donate_url)}">Make a donation</a>.</p>`);
+    const result = await sendEmail(
+      settings.notify_emails ?? [],
+      `New ceramics order ${order.order_no} — ${order.parent_name}`,
+      adminHtml,
+      order.email, // "Reply" goes straight to the family
+    );
 
-    const results = await Promise.allSettled([
-      sendEmail(settings.notify_emails ?? [], `New ceramics order ${order.order_no} — ${order.parent_name}`, adminHtml, order.email),
-      sendEmail([order.email], `Your ceramics order ${order.order_no}`, familyHtml, settings.notify_emails?.[0]),
-    ]);
-
-    return json({ ok: true, results: results.map((r) => r.status) });
+    return json({ ok: true, result });
   } catch (e) {
     console.error(e);
     return json({ error: String((e as Error).message ?? e) }, 500);
