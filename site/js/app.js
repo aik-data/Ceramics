@@ -233,9 +233,12 @@ function viewCart(error = "") {
       </div>
       <form class="panel" id="checkout" novalidate>
         <h2 style="font-size:1.5rem">Check out</h2>
-        <div class="field"><label for="parent_name">Parent / guardian name <span class="req">*</span></label><input id="parent_name" type="text" autocomplete="name" required value="${esc(saved.parent_name)}"></div>
+        <div class="grid-2">
+          <div class="field"><label for="first_name">First name <span class="req">*</span></label><input id="first_name" type="text" autocomplete="given-name" required value="${esc(saved.first_name)}"></div>
+          <div class="field"><label for="last_name">Last name <span class="req">*</span></label><input id="last_name" type="text" autocomplete="family-name" required value="${esc(saved.last_name)}"></div>
+        </div>
         <div class="field"><label for="email">Email <span class="req">*</span></label><input id="email" type="email" autocomplete="email" required value="${esc(saved.email)}"><div class="hint">Your FutureFund invoice will be sent here.</div></div>
-        <div class="field"><label for="phone">Phone <span class="muted small">(optional)</span></label><input id="phone" type="tel" autocomplete="tel" value="${esc(saved.phone)}"></div>
+        <div class="field"><label for="phone">Phone <span class="req">*</span></label><input id="phone" type="tel" autocomplete="tel" inputmode="tel" required value="${esc(saved.phone)}"></div>
         <div class="grid-2">
           <div class="field"><label for="student_name">Student name <span class="req">*</span></label><input id="student_name" type="text" required value="${esc(saved.student_name)}"></div>
           <div class="field"><label for="student_class">Teacher / class <span class="req">*</span></label><input id="student_class" type="text" required value="${esc(saved.student_class)}"></div>
@@ -274,12 +277,13 @@ function viewCart(error = "") {
     e.preventDefault();
     const f = (id) => document.getElementById(id).value.trim();
     const order = {
-      parent_name: f("parent_name"), email: f("email"), phone: f("phone"),
+      first_name: f("first_name"), last_name: f("last_name"),
+      parent_name: `${f("first_name")} ${f("last_name")}`.trim(), email: f("email"), phone: f("phone"),
       student_name: f("student_name"), student_class: f("student_class"),
       pickup_option_id: f("pickup"), notes: f("notes"),
       items: cart.get().map(({ piece_id, qty }) => ({ piece_id, qty })),
     };
-    const missing = ["parent_name", "email", "student_name", "student_class", "pickup"].filter((k) => !f(k));
+    const missing = ["first_name", "last_name", "email", "phone", "student_name", "student_class", "pickup"].filter((k) => !f(k));
     form.querySelectorAll("[aria-invalid]").forEach((el) => el.removeAttribute("aria-invalid"));
     const errBox = document.getElementById("form-error");
     if (missing.length) {
@@ -296,13 +300,21 @@ function viewCart(error = "") {
       document.getElementById("email").focus();
       return;
     }
+    if (order.phone.replace(/\D/g, "").length < 7) {
+      document.getElementById("phone").setAttribute("aria-invalid", "true");
+      errBox.textContent = "Please check the phone number.";
+      errBox.classList.remove("hidden");
+      document.getElementById("phone").focus();
+      return;
+    }
     errBox.classList.add("hidden");
     try { localStorage.setItem("ceramics-contact", JSON.stringify({ ...order, pickup: order.pickup_option_id, items: undefined, notes: undefined })); } catch {}
 
     const btn = e.target.querySelector("button[type=submit]");
     btn.disabled = true; btn.textContent = "Placing order…";
     try {
-      const res = await api.placeOrder(order);
+      const { first_name, last_name, ...payload } = order;
+      const res = await api.placeOrder(payload);
       const summary = {
         ...res, email: order.email,
         items: items.map((i) => ({ title: i.p.title, artist: i.p.artist, qty: i.qty, cents: i.qty * i.p.suggested_cents, photo: i.p.photos?.[0] })),

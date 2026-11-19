@@ -231,6 +231,7 @@ begin
   end if;
 
   if coalesce(trim(p->>'parent_name'),'') = '' or coalesce(trim(p->>'email'),'') = ''
+     or coalesce(trim(p->>'phone'),'') = ''
      or coalesce(trim(p->>'student_name'),'') = '' or coalesce(trim(p->>'student_class'),'') = '' then
     raise exception 'MISSING_FIELDS';
   end if;

@@ -89,7 +89,7 @@ export function createDemoBackend() {
       const db = load();
       if (!isMember()) throw new Error("NOT_SIGNED_IN");
       if (saleState(db.settings) !== "open") throw new Error("SALE_NOT_OPEN");
-      if (![o.parent_name, o.email, o.student_name, o.student_class].every((v) => String(v ?? "").trim())) throw new Error("MISSING_FIELDS");
+      if (![o.parent_name, o.email, o.phone, o.student_name, o.student_class].every((v) => String(v ?? "").trim())) throw new Error("MISSING_FIELDS");
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(o.email)) throw new Error("BAD_EMAIL");
       if (!o.items?.length) throw new Error("EMPTY_CART");
       const pickup = db.pickupOptions.find((p) => p.id === o.pickup_option_id && p.active);

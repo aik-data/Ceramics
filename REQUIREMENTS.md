@@ -61,9 +61,9 @@ There is no separate volunteer role. Everything behind the scenes is done by adm
 ### 4.4 Cart and checkout
 - Families add one or more pieces to a cart.
 - To check out, they enter:
-  - Parent/guardian name
+  - Parent/guardian first name and last name
   - Email address (where the FutureFund invoice will be sent)
-  - Phone number (optional)
+  - Phone number (required)
   - Student name and teacher/class
   - **Pickup choice:** a dropdown of the pickup dates, times and places the admins set up (§6.5)
   - Notes (optional)
