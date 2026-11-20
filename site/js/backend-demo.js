@@ -148,9 +148,9 @@ export function createDemoBackend() {
       switch (action) {
         case "seen": o.seen_at ||= now; break;
         case "invoice_sent": Object.assign(o, { status: "invoice_sent", invoice_sent_at: now, seen_at: o.seen_at || now }); log("Invoice sent"); break;
-        case "paid": Object.assign(o, { status: "paid", paid_at: now, amount_received_cents: data.amount_cents, seen_at: o.seen_at || now }); log("Marked paid", `$${(data.amount_cents / 100).toFixed(2)}`); break;
+        case "paid": Object.assign(o, { status: "paid", paid_at: now, seen_at: o.seen_at || now }); log("Marked paid"); break;
         case "unpaid": Object.assign(o, { status: "new", paid_at: null, amount_received_cents: null, picked_up_at: null }); log("Payment undone"); break;
-        case "paid_picked_up": Object.assign(o, { status: "paid", paid_at: now, picked_up_at: now, amount_received_cents: data.amount_cents, seen_at: o.seen_at || now }); log("Receipt checked — paid and picked up", `$${(data.amount_cents / 100).toFixed(2)}`); break;
+        case "paid_picked_up": Object.assign(o, { status: "paid", paid_at: now, picked_up_at: now, seen_at: o.seen_at || now }); log("Receipt checked — paid and picked up"); break;
         case "picked_up": Object.assign(o, { picked_up_at: now }); log("Picked up"); break;
         case "unpicked": Object.assign(o, { picked_up_at: null }); log("Pickup undone"); break;
         case "release": o.order_items.forEach((i) => (i.released = true)); Object.assign(o, { status: "released", released_at: now, seen_at: o.seen_at || now }); log("Order released", "All pieces back on sale"); break;

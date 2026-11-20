@@ -108,14 +108,14 @@ export function createLiveBackend({ supabaseUrl, supabaseAnonKey, area = "family
           await upd({ status: "invoice_sent", invoice_sent_at: now, seen_at: order.seen_at ?? now });
           return log(order.id, "Invoice sent");
         case "paid":
-          await upd({ status: "paid", paid_at: now, amount_received_cents: data.amount_cents, seen_at: order.seen_at ?? now });
-          return log(order.id, "Marked paid", `$${(data.amount_cents / 100).toFixed(2)}`);
+          await upd({ status: "paid", paid_at: now, seen_at: order.seen_at ?? now });
+          return log(order.id, "Marked paid");
         case "unpaid":
           await upd({ status: "new", paid_at: null, amount_received_cents: null, picked_up_at: null });
           return log(order.id, "Payment undone");
         case "paid_picked_up":
-          await upd({ status: "paid", paid_at: now, picked_up_at: now, amount_received_cents: data.amount_cents, seen_at: order.seen_at ?? now });
-          return log(order.id, "Receipt checked — paid and picked up", `$${(data.amount_cents / 100).toFixed(2)}`);
+          await upd({ status: "paid", paid_at: now, picked_up_at: now, seen_at: order.seen_at ?? now });
+          return log(order.id, "Receipt checked — paid and picked up");
         case "picked_up":
           await upd({ picked_up_at: now });
           return log(order.id, "Picked up");

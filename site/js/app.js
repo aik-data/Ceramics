@@ -2,7 +2,7 @@
 // amount through the FutureFund link, keep the receipt, and bring it to pickup.
 import { getApi } from "./api.js";
 import {
-  esc, money, fmtDateTime, toast, friendlyError,
+  esc, money, fmtDateTime, fmtDate, toast, friendlyError,
   pickupDaysText, instructionsHtml, credit,
 } from "./util.js";
 
@@ -136,7 +136,8 @@ function statusBadge(p) {
 function viewGallery() {
   document.title = info.fundraiser_name;
   const cats = [...new Set(gallery.pieces.map((p) => p.category).filter(Boolean))].sort();
-  const pct = gallery.goal_cents ? Math.min(100, Math.round((gallery.raised_cents / gallery.goal_cents) * 100)) : 0;
+  const days = [...new Set(pickupOptions().filter((o) => o.pickup_date).map((o) => o.pickup_date))].sort();
+  const place = pickupPlace();
   const shown = gallery.pieces.filter((p) =>
     filter === "all" ? true : filter === "available" ? p.available > 0 : p.category === filter);
 
@@ -153,12 +154,11 @@ function viewGallery() {
       </ol>
       ${info.sale_closes_at && info.sale_state === "open" ? `<p class="small muted">Reservations close ${esc(fmtDateTime(info.sale_closes_at))}</p>` : ""}
     </div>
-    ${gallery.goal_cents ? `<div class="goal">
-      <div class="eyebrow">Raised so far</div>
-      <div class="amount">${money(gallery.raised_cents)}</div>
-      <div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Fundraiser progress"><span style="width:${pct}%"></span></div>
-      <div class="row small muted"><span>${pct}% of our ${money(gallery.goal_cents)} goal</span><span class="spacer"></span>
-      <a href="${esc(info.donate_url)}" target="_blank" rel="noopener">Make a donation →</a></div>
+    ${days.length ? `<div class="goal">
+      <div class="eyebrow">Pickup at school</div>
+      <ul class="pickup-days">${days.map((d) => `<li>${esc(fmtDate(d))}</li>`).join("")}</ul>
+      <div class="small muted">Before or after school${place ? ` · ${esc(place)}` : ""}. Bring your FutureFund receipt.</div>
+      <div class="row small" style="margin-top:12px"><span class="spacer"></span><a href="${esc(info.donate_url)}" target="_blank" rel="noopener">Make a donation →</a></div>
     </div>` : ""}
   </div></section>
   <div class="wrap">

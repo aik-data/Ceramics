@@ -75,8 +75,8 @@ export function seedDemo() {
     ],
     activity: [
       { id: "a0", at: iso(-1 * day), admin_email: "admin@example.org", order_id: "o1", action: "Picked up", detail: "" },
-      { id: "a1", at: iso(-4 * day), admin_email: "admin@example.org", order_id: "o1", action: "Marked paid", detail: "$60.00" },
-      { id: "a2", at: iso(-0.9 * day), admin_email: "admin@example.org", order_id: "o2", action: "Marked paid", detail: "$40.00" },
+      { id: "a1", at: iso(-4 * day), admin_email: "admin@example.org", order_id: "o1", action: "Marked paid", detail: "" },
+      { id: "a2", at: iso(-0.9 * day), admin_email: "admin@example.org", order_id: "o2", action: "Marked paid", detail: "" },
     ],
     admins: [{ user_id: "demo-admin", email: "admin@example.org", created_at: iso(-10 * day) }],
   };

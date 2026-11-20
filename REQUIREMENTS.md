@@ -11,6 +11,7 @@ Status: **Approved for build** · Last updated: 2026-11-20
 > - **Instructions:** an editable setting, using `{link}` and `{pickup_days}` placeholders. Shown in the cart and on the reservation page, and copied into the admin email.
 > - **Confirmation:** families get no email. The reservation page has a "Print / Save as PDF" button and warns them before they leave without saving. The admin alert email is a complete record they can forward to the family.
 > - **Credit:** always generic — "Handcrafted by a Cal High Ceramics 1 student".
+> - **No money tracking:** admins won't know payment amounts, so there's no amount entry, Donations page, total raised, goal, or net profit. "Mark paid" is just a confirmation. Pieces still show a suggested donation. The dashboard and reports show counts and statuses only.
 
 ## 1. Goal
 

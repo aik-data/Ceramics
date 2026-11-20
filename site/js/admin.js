@@ -1,4 +1,4 @@
-// Admin portal: orders, listings, donations, settings, reports.
+// Admin portal: reservations, listings, settings, reports.
 import { getApi } from "./api.js";
 import {
   esc, money, toCents, toDollars, fmtDateTime, fmtDate, pickupText, ago, toast, friendlyError,
@@ -34,12 +34,11 @@ const pill = (o) => o.status === "paid" && o.picked_up_at
 const activeItems = (o) => o.order_items.filter((i) => !i.released);
 
 function stats() {
-  const sales = D.orders.filter((o) => o.status === "paid").reduce((s, o) => s + (o.amount_received_cents || 0), 0);
-  const donations = D.donations.reduce((s, d) => s + d.amount_cents, 0);
   const open = D.orders.filter((o) => o.status === "new" || o.status === "invoice_sent");
   const units = D.pieces.filter((p) => !p.hidden).reduce((a, p) => ({ total: a.total + p.quantity, sold: a.sold + p.sold, held: a.held + p.held, avail: a.avail + Math.max(0, p.available) }), { total: 0, sold: 0, held: 0, avail: 0 });
   const toPickUp = D.orders.filter((o) => o.status === "paid" && !o.picked_up_at).length;
-  return { sales, donations, raised: sales + donations, awaiting: open.reduce((s, o) => s + orderTotal(o), 0), openCount: open.length, units, toPickUp };
+  const pickedUp = D.orders.filter((o) => o.status === "paid" && o.picked_up_at).length;
+  return { openCount: open.length, overdueCount: D.orders.filter(isOverdue).length, units, toPickUp, pickedUp };
 }
 
 // ───── Dialog helper ─────
@@ -73,7 +72,6 @@ function shell(active, inner) {
     ["dashboard", "#/", "Dashboard"],
     ["orders", "#/orders/reserved", `Reservations ${n ? `<span class="badge-count">${n}</span>` : ""}`],
     ["listings", "#/listings", "Listings"],
-    ["donations", "#/donations", "Donations"],
     ["settings", "#/settings", "Settings"],
     ["reports", "#/reports", "Reports"],
   ];
@@ -145,10 +143,8 @@ function viewSetPassword() {
 function viewDashboard() {
   const st = stats();
   const s = D.settings;
-  const pct = s.goal_cents ? Math.min(100, Math.round((st.raised / s.goal_cents) * 100)) : 0;
   const news = unread();
   const overdue = D.orders.filter(isOverdue);
-  const net = st.raised - (s.expenses_cents || 0);
 
   app.innerHTML = shell("dashboard", `
     <div class="admin-top"><h1>Dashboard</h1><span class="spacer"></span><button class="btn btn-ghost btn-sm" data-act="refresh">Refresh</button></div>
@@ -158,22 +154,15 @@ function viewDashboard() {
       <div class="table-wrap"><table class="list"><tbody>
       ${news.map((o) => `<tr class="clickable" data-href="#/order/${o.id}">
         <td><span class="unread-dot"></span><strong>${esc(o.order_no)}</strong></td><td>${esc(o.parent_name)}</td>
-        <td>${activeItems(o).length} item${activeItems(o).length === 1 ? "" : "s"}</td><td class="num">${money(orderTotal(o))}</td>
+        <td>${activeItems(o).length} item${activeItems(o).length === 1 ? "" : "s"}</td>
         <td class="small muted">${ago(o.created_at)}</td><td><button class="btn btn-sm">Open</button></td></tr>`).join("")}
       </tbody></table></div></section>` : ""}
 
     <div class="tiles">
-      <div class="tile"><div class="k">Total raised</div><div class="v">${money(st.raised)}</div><div class="s">${money(st.sales)} sales + ${money(st.donations)} donations</div></div>
-      <div class="tile"><div class="k">Net profit</div><div class="v">${money(net)}</div><div class="s">${s.expenses_cents ? `after ${money(s.expenses_cents)} expenses` : `No expenses entered · <a href="#/settings">add</a>`}</div></div>
-      <div class="tile"><div class="k">Awaiting donation</div><div class="v">${money(st.awaiting)}</div><div class="s">${st.openCount} reservation${st.openCount === 1 ? "" : "s"} not yet marked paid</div></div>
+      <div class="tile"><div class="k">Reserved</div><div class="v">${st.openCount}</div><div class="s">not yet marked paid${st.overdueCount ? ` · ${st.overdueCount} overdue` : ""}</div></div>
       <div class="tile"><div class="k">To pick up</div><div class="v">${st.toPickUp}</div><div class="s">paid reservation${st.toPickUp === 1 ? "" : "s"} waiting for pickup</div></div>
+      <div class="tile"><div class="k">Picked up</div><div class="v">${st.pickedUp}</div><div class="s">reservation${st.pickedUp === 1 ? "" : "s"} complete</div></div>
       <div class="tile"><div class="k">Pieces</div><div class="v">${st.units.sold} sold</div><div class="s">${st.units.held} reserved · ${st.units.avail} available of ${st.units.total}</div></div>
-    </div>
-
-    <div class="panel" style="margin-bottom:22px">
-      <div class="row"><strong>Goal progress</strong><span class="spacer"></span><span class="muted small">${money(st.raised)} of ${money(s.goal_cents)} · ${pct}%</span></div>
-      <div class="progress"><span style="width:${pct}%"></span></div>
-      <div class="small muted">Shown to families on the gallery page. Includes paid reservations and recorded donations.</div>
     </div>
 
     ${overdue.length ? `<div class="panel" style="margin-bottom:22px">
@@ -216,7 +205,7 @@ function viewOrders(tab = "reserved") {
         <td>${esc(o.parent_name)}<div class="small muted">${esc(o.email)}</div></td>
         <td>${esc(o.phone)}</td>
         <td>${activeItems(o).map((i) => esc(i.title) + (i.qty > 1 ? ` ×${i.qty}` : "")).join(", ") || `<span class="muted">—</span>`}</td>
-        <td class="num">${money(o.status === "paid" ? o.amount_received_cents : orderTotal(o))}</td>
+        <td class="num">${money(orderTotal(o))}</td>
         <td>${pill(o)}</td>
         <td class="small muted">${ago(o.created_at)}</td></tr>`).join("")}</tbody></table></div>`
       : `<div class="panel empty">Nothing here yet.</div>`}`);
@@ -266,12 +255,12 @@ async function viewOrder(id) {
     <button class="btn btn-ghost btn-block" data-act="copy-details">Copy reservation details</button>
     <a class="btn btn-ghost btn-block" href="${esc(mailto(o, `Your ceramics reservation ${o.order_no}`, `Hi ${first},\n\nThank you for reserving with ${D.settings.fundraiser_name}! Here are your reservation details.\n\n${reservationText(o)}\n\nThank you for supporting our student artists!`))}">Email the family their details</a>`;
   if (o.status === "paid" && !o.picked_up_at) actions = `
-    <p class="note note-ok" style="margin:0">Paid ${money(o.amount_received_cents)} · ${fmtDateTime(o.paid_at)}</p>
+    <p class="note note-ok" style="margin:0">Marked paid ${fmtDateTime(o.paid_at)}</p>
     <button class="btn btn-accent btn-block" data-act="picked-up">Mark picked up</button>
     <button class="btn btn-ghost btn-block" data-act="copy-details">Copy reservation details</button>
     <button class="btn btn-ghost btn-block btn-sm" data-act="unpaid">Undo — mark as not paid</button>`;
   if (o.status === "paid" && o.picked_up_at) actions = `
-    <p class="note note-ok" style="margin:0">Paid ${money(o.amount_received_cents)} · Picked up ${fmtDateTime(o.picked_up_at)}</p>
+    <p class="note note-ok" style="margin:0">Paid · Picked up ${fmtDateTime(o.picked_up_at)}</p>
     <button class="btn btn-ghost btn-block btn-sm" data-act="unpicked">Undo pickup</button>`;
   if (o.status === "released") actions = `<p class="note" style="margin:0">Released ${fmtDateTime(o.released_at)}. These pieces are back on sale.</p>`;
   if (open) actions += `
@@ -327,18 +316,6 @@ async function viewOrder(id) {
   app.dataset.order = o.id;
 }
 
-function amountDialog(o, title, button, action, msg) {
-  openDialog(`<div class="dlg-body"><h3>${esc(title)}</h3>
-    <div class="field"><label for="amt">Amount donated in FutureFund ($)</label>
-    <input id="amt" type="text" inputmode="decimal" value="${toDollars(orderTotal(o))}" required>
-    <div class="hint">Suggested total: ${money(orderTotal(o))}. Change it if they gave a different amount.</div></div></div>
-    <div class="dlg-foot"><button class="btn btn-ghost" data-cancel>Cancel</button><button class="btn btn-accent" type="submit">${esc(button)}</button></div>`,
-    { onSubmit: async (f) => {
-      const cents = toCents(f.querySelector("#amt").value);
-      if (cents <= 0) throw new Error("Enter the amount donated.");
-      await api.orderAction(o, action, { amount_cents: cents }); await reload(); toast(msg, "ok"); viewOrder(o.id);
-    } });
-}
 
 async function orderAct(act, el) {
   const o = D.orderById[app.dataset.order];
@@ -351,8 +328,12 @@ async function orderAct(act, el) {
           <div class="dlg-foot"><button class="btn" data-cancel>Done</button></div>`);
       }
       break;
-    case "mark-paid": amountDialog(o, `Mark ${o.order_no} paid`, "Mark paid", "paid", "Marked paid — pieces are now sold"); break;
-    case "paid-picked-up": amountDialog(o, `${o.order_no}: receipt checked`, "Paid & picked up", "paid_picked_up", "Marked paid and picked up"); break;
+    case "mark-paid":
+      if (await confirmDialog(`Mark ${o.order_no} paid?`, "Use this once you've confirmed their donation in FutureFund. The pieces will show as sold.", "Mark paid")) await run("paid", {}, "Marked paid — pieces are now sold");
+      break;
+    case "paid-picked-up":
+      if (await confirmDialog(`${o.order_no}: receipt checked?`, "Marks the reservation paid and picked up in one step.", "Paid & picked up")) await run("paid_picked_up", {}, "Marked paid and picked up");
+      break;
     case "picked-up": await run("picked_up", {}, "Marked picked up"); break;
     case "unpicked":
       if (await confirmDialog("Undo pickup?", "The reservation goes back to “Paid — to pick up”.", "Undo pickup")) await run("unpicked", {}, "Pickup undone");
@@ -509,38 +490,6 @@ function viewListing(id) {
   });
 }
 
-// ───── Donations ─────
-function donationDialog(d = {}) {
-  openDialog(`<div class="dlg-body"><h3>${d.id ? "Edit donation" : "Record a donation"}</h3>
-    <p class="small muted">For money given through the FutureFund donation page, so it counts toward the goal.</p>
-    <div class="grid-2">
-      <div class="field"><label for="d-amt">Amount ($) <span class="req">*</span></label><input id="d-amt" type="text" inputmode="decimal" required value="${d.amount_cents ? toDollars(d.amount_cents) : ""}"></div>
-      <div class="field"><label for="d-date">Date</label><input id="d-date" type="date" value="${esc(d.donated_on ?? new Date().toISOString().slice(0, 10))}"></div>
-    </div>
-    <div class="field"><label for="d-name">Name <span class="muted small">(optional)</span></label><input id="d-name" type="text" value="${esc(d.name ?? "")}"></div>
-    <div class="field"><label for="d-note">Note <span class="muted small">(optional)</span></label><input id="d-note" type="text" value="${esc(d.note ?? "")}"></div></div>
-    <div class="dlg-foot"><button class="btn btn-ghost" data-cancel>Cancel</button><button class="btn" type="submit">Save</button></div>`,
-    { onSubmit: async (f) => {
-      const cents = toCents(f.querySelector("#d-amt").value);
-      if (cents <= 0) throw new Error("Enter an amount.");
-      await api.saveDonation({ ...(d.id ? { id: d.id } : {}), amount_cents: cents, donated_on: f.querySelector("#d-date").value || new Date().toISOString().slice(0, 10), name: f.querySelector("#d-name").value.trim(), note: f.querySelector("#d-note").value.trim() });
-      await reload(); toast("Donation saved", "ok"); viewDonations();
-    } });
-}
-function viewDonations() {
-  const total = D.donations.reduce((s, d) => s + d.amount_cents, 0);
-  app.innerHTML = shell("donations", `
-    <div class="admin-top"><h1>Donations</h1><span class="spacer"></span><button class="btn btn-sm" data-act="add-donation">Record donation</button></div>
-    <div class="tiles"><div class="tile"><div class="k">Donations recorded</div><div class="v">${money(total)}</div><div class="s">${D.donations.length} entr${D.donations.length === 1 ? "y" : "ies"} · counted toward the goal</div></div></div>
-    <p class="note" style="margin-bottom:18px">Families donate through the FutureFund page linked from the Donate button. The site can't see those payments, so record them here (each one, or a running total) to update the goal progress.</p>
-    ${D.donations.length ? `<div class="table-wrap"><table class="list"><thead><tr><th>Date</th><th>Name</th><th>Note</th><th class="num">Amount</th><th></th></tr></thead>
-      <tbody>${D.donations.map((d) => `<tr><td>${fmtDate(d.donated_on)}</td><td>${esc(d.name) || `<span class="muted">—</span>`}</td><td>${esc(d.note)}</td>
-        <td class="num">${money(d.amount_cents)}</td>
-        <td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost btn-sm" data-act="edit-donation" data-id="${d.id}">Edit</button>
-        <button class="btn btn-danger btn-sm" data-act="del-donation" data-id="${d.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>`
-      : `<div class="panel empty">No donations recorded yet.</div>`}`);
-}
-
 // ───── Settings ─────
 function pickupDialog(o = {}) {
   openDialog(`<div class="dlg-body"><h3>${o.id ? "Edit pickup day" : "Add pickup day"}</h3>
@@ -607,10 +556,8 @@ function viewSettings() {
     </form>
 
     <form class="panel settings-section" id="set-money">
-      <h2>Goal, donations &amp; follow-up</h2>
+      <h2>Donation link &amp; follow-up</h2>
       <div class="grid-2">
-        <div class="field"><label for="goal">Fundraiser goal ($)</label><input id="goal" type="text" inputmode="decimal" value="${toDollars(s.goal_cents)}"></div>
-        <div class="field"><label for="expenses">Total expenses ($)</label><input id="expenses" type="text" inputmode="decimal" value="${toDollars(s.expenses_cents)}"><div class="hint">Optional. Used for net profit on the dashboard.</div></div>
         <div class="field"><label for="overdue">Flag unpaid reservations after (hours)</label><input id="overdue" type="number" min="1" value="${s.overdue_hours}"></div>
         <div class="field"><label for="donate">FutureFund donation link</label><input id="donate" type="url" value="${esc(s.donate_url)}"><div class="hint">Used in the instructions ({link}) and by the Donate button.</div></div>
       </div>
@@ -663,7 +610,7 @@ function viewSettings() {
     return { sale_opens_at: opens, sale_closes_at: closes, checkout_paused: document.getElementById("paused").checked,
       fundraiser_name: val("fname") || "Student Ceramics Sale", school_name: val("sname"), intro: val("intro") };
   }, "Sale settings saved");
-  saveForm("set-money", () => ({ goal_cents: toCents(val("goal")), expenses_cents: toCents(val("expenses")),
+  saveForm("set-money", () => ({
     overdue_hours: Math.max(1, parseInt(val("overdue")) || 48), donate_url: val("donate") || "https://www.futurefund.com/" }));
   saveForm("set-instr", () => ({ instructions: val("instr") || DEFAULT_INSTRUCTIONS }), "Instructions saved");
   document.getElementById("instr").addEventListener("input", (e) => {
@@ -692,10 +639,9 @@ function viewSettings() {
 // ───── Reports ─────
 function viewReports() {
   const reports = [
-    ["pickup", "Pickup list", "Every active reservation sorted by last name, with phone, pieces, suggested amount, paid and picked-up columns — print it for the pickup table."],
-    ["sales", "Sales", "Each paid reservation with its pieces and the amount donated."],
+    ["pickup", "Pickup list", "Every active reservation sorted by last name, with phone, pieces, paid and picked-up columns — print it for the pickup table."],
+    ["sales", "Paid reservations", "Each reservation marked paid, with its pieces and pickup status."],
     ["open", "Unpaid reservations", "Reservations not yet marked paid, with how long each has been waiting."],
-    ["donations", "Donations", "Every donation recorded on the Donations page."],
     ["inventory", "Inventory", "Every piece with quantity, reserved, sold and available."],
   ];
   app.innerHTML = shell("reports", `
@@ -707,21 +653,20 @@ function downloadReport(k) {
   const lastName = (o) => (o.parent_name.trim().split(/\s+/).slice(-1)[0] || "").toLowerCase();
   const pieces = (o) => activeItems(o).map((i) => i.title + (i.qty > 1 ? ` x${i.qty}` : "")).join("; ");
   if (k === "pickup") {
-    const rows = [["Last name", "Name", "Reservation", "Phone", "Email", "Pieces", "Suggested donation", "Paid?", "Amount donated", "Picked up?"]];
+    const rows = [["Last name", "Name", "Reservation", "Phone", "Email", "Pieces", "Suggested donation", "Paid?", "Picked up?"]];
     D.orders.filter((o) => o.status !== "released")
       .sort((a, b) => lastName(a).localeCompare(lastName(b)) || a.parent_name.localeCompare(b.parent_name))
       .forEach((o) => rows.push([o.parent_name.trim().split(/\s+/).slice(-1)[0], o.parent_name, o.order_no, o.phone, o.email, pieces(o), toDollars(orderTotal(o)),
-        o.status === "paid" ? "Yes" : "Not yet", o.status === "paid" ? toDollars(o.amount_received_cents) : "", o.picked_up_at ? fmtDate(o.picked_up_at) : ""]));
+        o.status === "paid" ? "Yes" : "Not yet", o.picked_up_at ? fmtDate(o.picked_up_at) : ""]));
     downloadCsv(`pickup-list-${stamp}.csv`, rows);
   }
   if (k === "sales") {
-    const rows = [["Reservation", "Paid on", "Name", "Email", "Phone", "Piece", "Qty", "Suggested", "Reservation amount donated", "Picked up"]];
+    const rows = [["Reservation", "Marked paid", "Name", "Email", "Phone", "Piece", "Qty", "Suggested donation", "Picked up"]];
     for (const o of D.orders.filter((x) => x.status === "paid"))
       activeItems(o).forEach((i, n) => rows.push([o.order_no, fmtDate(o.paid_at), o.parent_name, o.email, o.phone, i.title, i.qty, toDollars(i.qty * i.suggested_cents),
-        n === 0 ? toDollars(o.amount_received_cents) : "", n === 0 && o.picked_up_at ? fmtDate(o.picked_up_at) : ""]));
-    downloadCsv(`sales-${stamp}.csv`, rows);
+        n === 0 && o.picked_up_at ? fmtDate(o.picked_up_at) : ""]));
+    downloadCsv(`paid-reservations-${stamp}.csv`, rows);
   }
-  if (k === "donations") downloadCsv(`donations-${stamp}.csv`, [["Date", "Name", "Note", "Amount"], ...D.donations.map((d) => [d.donated_on, d.name, d.note, toDollars(d.amount_cents)])]);
   if (k === "open") {
     const rows = [["Reservation", "Reserved", "Hours waiting", "Overdue", "Name", "Email", "Phone", "Pieces", "Suggested donation"]];
     D.orders.filter((o) => o.status === "new" || o.status === "invoice_sent").forEach((o) => rows.push([o.order_no, fmtDateTime(o.created_at),
@@ -742,7 +687,6 @@ async function route() {
   if (page === "order") return viewOrder(arg);
   if (page === "listings") return viewListings();
   if (page === "listing") return viewListing(arg);
-  if (page === "donations") return viewDonations();
   if (page === "settings") return viewSettings();
   if (page === "reports") return viewReports();
   return viewDashboard();
@@ -765,11 +709,6 @@ document.addEventListener("click", async (e) => {
       }
       case "reset-demo": if (await confirmDialog("Reset demo data?", "All demo changes in this browser will be erased.", "Reset", true)) { api.resetDemo(); location.hash = "#/"; location.reload(); } return;
       case "refresh": await reload(); route(); toast("Up to date"); return;
-      case "add-donation": donationDialog(); return;
-      case "edit-donation": donationDialog(D.donations.find((d) => d.id === t.dataset.id)); return;
-      case "del-donation":
-        if (await confirmDialog("Delete donation?", "This removes it from the total raised.", "Delete", true)) { await api.deleteDonation(t.dataset.id); await reload(); toast("Donation deleted"); viewDonations(); }
-        return;
       case "add-pickup": pickupDialog(); return;
       case "edit-pickup": pickupDialog(D.pickupOptions.find((o) => o.id === t.dataset.id)); return;
       case "del-pickup":
@@ -778,7 +717,7 @@ document.addEventListener("click", async (e) => {
       case "pickup-up": {
         const list = D.pickupOptions; const i = list.findIndex((o) => o.id === t.dataset.id);
         [list[i - 1], list[i]] = [list[i], list[i - 1]];
-        await Promise.all(list.map((o, n) => api.savePickup({ id: o.id, sort: n })));
+        await Promise.all(list.map((o, n) => api.savePickup({ ...o, sort: n })));
         await reload(); viewSettings(); return;
       }
       case "remove-admin":

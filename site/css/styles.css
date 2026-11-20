@@ -321,3 +321,5 @@ dialog .dlg-foot { display: flex; gap: 10px; justify-content: flex-end; padding:
 }
 
 .pill-picked { background: #e3e8f4; color: #2e4476; }
+
+.pickup-days { list-style: none; padding: 0; margin: 10px 0 8px; font-family: var(--serif); font-size: 1.5rem; line-height: 1.3; }
