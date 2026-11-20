@@ -1,13 +1,18 @@
-// Family-facing gallery: browse → cart → checkout. Payment happens later via a FutureFund invoice.
+// Family-facing gallery: browse → cart → reserve. Families then donate the suggested
+// amount through the FutureFund link, keep the receipt, and bring it to pickup.
 import { getApi } from "./api.js";
-import { esc, money, fmtDateTime, pickupText, toast, friendlyError } from "./util.js";
+import {
+  esc, money, fmtDateTime, toast, friendlyError,
+  pickupDaysText, instructionsHtml, credit,
+} from "./util.js";
 
 const app = document.getElementById("app");
 const CART_KEY = "ceramics-cart";
 const LAST_ORDER_KEY = "ceramics-last-order";
 
 let api, info, gallery = null, filter = "all";
-let draft = {}; // what the family has typed into the checkout form (survives re-renders)
+let draft = {};              // what the family has typed into the checkout form (survives re-renders)
+let receiptPending = false;  // true until the family prints/saves their reservation page
 
 // ───── Cart (saved on this device) ─────
 const cart = {
@@ -24,6 +29,9 @@ const cart = {
 
 const pieceById = (id) => gallery?.pieces.find((p) => p.id === id);
 const canCheckout = () => info.sale_state === "open";
+const pickupOptions = () => gallery?.pickup_options ?? [];
+const instructions = () => instructionsHtml(info.instructions, info.donate_url, pickupOptions());
+const pickupPlace = () => [...new Set(pickupOptions().map((o) => o.location).filter(Boolean))].join(" / ");
 
 // Keep the cart honest against current availability.
 function reconcileCart() {
@@ -40,15 +48,18 @@ function reconcileCart() {
 }
 
 // ───── Layout ─────
+const schoolBanner = `<div class="school-band no-print"><img src="img/banner.jpg" alt="California High School Grizzlies"></div>`;
+const logo = (size = "sm") => `<img class="logo logo-${size}" src="img/logo.jpg" alt="Cal High Ceramics logo">`;
+
 function shell(inner) {
   const demo = api.mode === "demo"
-    ? `<div class="banner banner-demo">Demo mode — sample data stored only in your browser. <a href="admin.html">Open the admin portal</a> · <button class="linkish" data-act="reset-demo">Reset demo</button></div>` : "";
+    ? `<div class="banner banner-demo no-print">Demo mode — sample data stored only in your browser. <a href="admin.html">Open the admin portal</a> · <button class="linkish" data-act="reset-demo">Reset demo</button></div>` : "";
   const closed = info.sale_state === "closed"
-    ? `<div class="banner banner-closed">The sale has ended — thank you for supporting our student artists!</div>`
-    : info.sale_state === "paused" ? `<div class="banner banner-closed">Ordering is paused for the moment. Please check back soon.</div>` : "";
-  return `${demo}
-  <header class="site-header"><div class="wrap">
-    <a class="brand" href="#/"><span class="school">${esc(info.school_name)}</span><span class="name">${esc(info.fundraiser_name)}</span></a>
+    ? `<div class="banner banner-closed no-print">The sale has ended — thank you for supporting our student artists!</div>`
+    : info.sale_state === "paused" ? `<div class="banner banner-closed no-print">Reservations are paused for the moment. Please check back soon.</div>` : "";
+  return `${demo}${schoolBanner}
+  <header class="site-header no-print"><div class="wrap">
+    <a class="brand brand-logo" href="#/">${logo("sm")}<span class="brand-text"><span class="school">${esc(info.school_name)}</span><span class="name">${esc(info.fundraiser_name)}</span></span></a>
     <nav class="nav" aria-label="Main">
       <a href="#/" class="hide-sm">Gallery</a>
       <a href="${esc(info.donate_url)}" target="_blank" rel="noopener">Donate</a>
@@ -57,8 +68,8 @@ function shell(inner) {
   </div></header>
   ${closed}
   <main id="main">${inner}</main>
-  <footer class="footer"><div class="wrap row">
-    <span>${esc(info.school_name)} · ${esc(info.fundraiser_name)}</span><span class="spacer"></span>
+  <footer class="footer no-print"><div class="wrap row">
+    <span>${esc(info.fundraiser_name)}</span><span class="spacer"></span>
     <button class="linkish" data-act="signout">Sign out</button>
   </div></footer>`;
 }
@@ -71,14 +82,14 @@ function renderCartCount() {
 function viewComingSoon() {
   document.title = info.fundraiser_name;
   app.innerHTML = `
-  ${api.mode === "demo" ? `<div class="banner banner-demo">Demo mode</div>` : ""}
+  ${api.mode === "demo" ? `<div class="banner banner-demo">Demo mode</div>` : ""}${schoolBanner}
   <div class="center-card">
-    <div class="eyebrow">${esc(info.school_name)}</div>
+    ${logo("lg")}
     <h1>${esc(info.fundraiser_name)}</h1>
     <p class="muted">${esc(info.intro)}</p>
     <div class="panel" style="text-align:center">
       <div class="eyebrow">Coming soon</div>
-      <p style="font-family:var(--serif);font-size:1.6rem;margin:.3em 0">The sale opens ${esc(fmtDateTime(info.sale_opens_at))}</p>
+      <p style="font-family:var(--serif);font-size:1.6rem;margin:.3em 0">Reservations open ${esc(fmtDateTime(info.sale_opens_at))}</p>
       <a class="btn btn-ghost" href="${esc(info.donate_url)}" target="_blank" rel="noopener">Make a donation</a>
     </div>
   </div>`;
@@ -87,16 +98,16 @@ function viewComingSoon() {
 function viewGate(error = "") {
   document.title = info.fundraiser_name;
   app.innerHTML = `
-  ${api.mode === "demo" ? `<div class="banner banner-demo">Demo mode — the family password is <strong>clay</strong></div>` : ""}
+  ${api.mode === "demo" ? `<div class="banner banner-demo">Demo mode — the family password is <strong>clay</strong></div>` : ""}${schoolBanner}
   <div class="center-card">
-    <div class="eyebrow">${esc(info.school_name)}</div>
+    ${logo("lg")}
     <h1>${esc(info.fundraiser_name)}</h1>
     <p class="muted">${esc(info.intro)}</p>
     <form class="panel" id="gate">
       <div class="field">
-        <label for="pw">Family password</label>
+        <label for="pw">Password</label>
         <input id="pw" type="password" autocomplete="current-password" required autofocus>
-        <div class="hint">Shared with school families. You'll only need to enter it once on this device.</div>
+        <div class="hint">You'll only need to enter it once on this device.</div>
       </div>
       ${error ? `<p class="note note-bad" role="alert">${esc(error)}</p>` : ""}
       <button class="btn btn-block" type="submit">View the gallery</button>
@@ -118,7 +129,7 @@ function viewGate(error = "") {
 
 function statusBadge(p) {
   if (p.available > 0) return p.quantity > 1 ? `<span class="status status-left">${p.available} left</span>` : "";
-  if (p.held > 0 && p.sold < p.quantity) return `<span class="status status-held">On hold</span>`;
+  if (p.held > 0 && p.sold < p.quantity) return `<span class="status status-held">Reserved</span>`;
   return `<span class="status status-sold">${p.quantity > 1 ? "Sold out" : "Sold"}</span>`;
 }
 
@@ -132,10 +143,15 @@ function viewGallery() {
   app.innerHTML = shell(`
   <section class="hero"><div class="wrap hero-grid">
     <div>
-      <div class="eyebrow">${esc(info.school_name)} presents</div>
+      <div class="eyebrow">${esc(info.school_name)}</div>
       <h1>${esc(info.fundraiser_name)}</h1>
       <p class="lead">${esc(info.intro)}</p>
-      ${info.sale_closes_at && info.sale_state === "open" ? `<p class="small muted">Sale closes ${esc(fmtDateTime(info.sale_closes_at))}</p>` : ""}
+      <ol class="how">
+        <li><b>Reserve</b> the pieces you love</li>
+        <li><b>Donate</b> the suggested amount on FutureFund</li>
+        <li><b>Pick up</b> with your receipt on ${esc(pickupDaysText(pickupOptions()))}</li>
+      </ol>
+      ${info.sale_closes_at && info.sale_state === "open" ? `<p class="small muted">Reservations close ${esc(fmtDateTime(info.sale_closes_at))}</p>` : ""}
     </div>
     ${gallery.goal_cents ? `<div class="goal">
       <div class="eyebrow">Raised so far</div>
@@ -153,11 +169,11 @@ function viewGallery() {
     </div>
     ${shown.length ? `<div class="gallery">${shown.map((p) => `
       <a class="card ${p.available <= 0 ? "is-sold" : ""}" href="#/piece/${esc(p.id)}">
-        <div class="ph">${p.photos?.[0] ? `<img src="${esc(p.photos[0])}" alt="${esc(p.title)} by ${esc(p.artist)}" loading="lazy">` : ""}${statusBadge(p)}</div>
+        <div class="ph">${p.photos?.[0] ? `<img src="${esc(p.photos[0])}" alt="${esc(p.title)}" loading="lazy">` : ""}${statusBadge(p)}</div>
         <div class="meta">
           <div class="title">${esc(p.title)}</div>
-          <div class="artist">${esc(p.artist)}</div>
-          <div class="price">${money(p.suggested_cents)} <span class="muted small">suggested</span></div>
+          <div class="artist">${esc(credit(p.artist))}</div>
+          <div class="price">${money(p.suggested_cents)} <span class="muted small">suggested donation</span></div>
         </div>
       </a>`).join("")}</div>` : `<div class="empty">No pieces match this filter.</div>`}
   </div>`);
@@ -172,30 +188,30 @@ function viewPiece(id) {
   const photos = p.photos?.length ? p.photos : [];
 
   let action;
-  if (p.available <= 0) action = `<p class="note">${p.held > 0 && p.sold < p.quantity ? "This piece is on hold for another family. If it becomes available again, it will reappear here." : "This piece has found a home."}</p>`;
-  else if (!canCheckout()) action = `<p class="note note-warn">Ordering is closed right now.</p>`;
-  else if (maxAdd <= 0) action = `<p class="note note-ok">${inCart > 1 ? `All ${inCart} available are` : "It's"} in your cart.</p><a class="btn" href="#/cart">View cart</a>`;
+  if (p.available <= 0) action = `<p class="note">${p.held > 0 && p.sold < p.quantity ? "This piece is reserved by another family. If it becomes available again, it will reappear here." : "This piece has found a home."}</p>`;
+  else if (!canCheckout()) action = `<p class="note note-warn">Reservations are closed right now.</p>`;
+  else if (maxAdd <= 0) action = `<p class="note note-ok">${inCart > 1 ? `All ${inCart} available are` : "It's"} in your cart.</p><a class="btn" href="#/cart">Go to cart to reserve</a>`;
   else action = `
     ${p.quantity > 1 ? `<div class="field"><label for="qty">Quantity <span class="muted small">(${p.available} available)</span></label>
       <div class="qty"><button type="button" data-q="-1" aria-label="Fewer">−</button><input id="qty" type="number" min="1" max="${maxAdd}" value="1" inputmode="numeric"><button type="button" data-q="1" aria-label="More">+</button></div></div>` : ""}
     <button class="btn btn-block" data-act="add" data-id="${esc(p.id)}">Add to cart</button>
-    ${inCart ? `<p class="small muted" style="margin-top:10px">${inCart} already in your cart · <a href="#/cart">View cart</a></p>` : ""}`;
+    ${inCart ? `<p class="small muted" style="margin-top:10px">${inCart} already in your cart · <a href="#/cart">Go to cart to reserve</a></p>` : ""}`;
 
   app.innerHTML = shell(`<div class="wrap">
     <a class="back" href="#/">← All pieces</a>
     <div class="detail">
       <div>
-        <button class="main-ph" data-act="zoom" aria-label="Enlarge photo">${photos[0] ? `<img id="main-img" src="${esc(photos[0])}" alt="${esc(p.title)} by ${esc(p.artist)}">` : ""}</button>
+        <button class="main-ph" data-act="zoom" aria-label="Enlarge photo">${photos[0] ? `<img id="main-img" src="${esc(photos[0])}" alt="${esc(p.title)}">` : ""}</button>
         ${photos.length > 1 ? `<div class="thumbs">${photos.map((u, i) => `<button data-thumb="${i}" aria-current="${i === 0}" aria-label="Photo ${i + 1}"><img src="${esc(u)}" alt=""></button>`).join("")}</div>` : ""}
       </div>
       <div class="info">
         ${p.category ? `<div class="eyebrow">${esc(p.category)}</div>` : ""}
         <h1 style="font-size:clamp(2rem,4vw,2.8rem)">${esc(p.title)}</h1>
-        <div class="muted">by ${esc(p.artist)}</div>
+        <div class="muted">${esc(credit(p.artist))}</div>
         <div class="price-lg">${money(p.suggested_cents)} <span class="small muted">suggested donation</span></div>
         ${p.description ? `<p style="margin-top:18px">${esc(p.description)}</p>` : ""}
         <div style="margin-top:24px">${action}</div>
-        <p class="small muted" style="margin-top:24px">After you check out, your pieces are reserved and you'll get an invoice from FutureFund to pay.</p>
+        <p class="small muted" style="margin-top:24px">${instructions()}</p>
       </div>
     </div></div>`);
 }
@@ -210,7 +226,6 @@ function viewCart(error = "") {
     app.innerHTML = shell(`<div class="wrap page"><div class="empty">${error ? `<p class="note note-warn" role="alert" style="max-width:520px;margin:0 auto 24px">${esc(error)}</p>` : ""}<h2>Your cart is empty</h2><p>Browse the gallery and add the pieces you love.</p><a class="btn" href="#/">Browse the gallery</a></div></div>`);
     return;
   }
-  const opts = gallery.pickup_options;
   app.innerHTML = shell(`<div class="wrap page">
     <h1>Your cart</h1>
     <div class="cart-grid">
@@ -220,7 +235,7 @@ function viewCart(error = "") {
           ${i.p.photos?.[0] ? `<img src="${esc(i.p.photos[0])}" alt="">` : `<div></div>`}
           <div>
             <div class="t">${esc(i.p.title)}</div>
-            <div class="small muted">by ${esc(i.p.artist)} · ${money(i.p.suggested_cents)} suggested</div>
+            <div class="small muted">${esc(credit(i.p.artist))} · ${money(i.p.suggested_cents)} suggested</div>
             <div class="row" style="margin-top:8px">
               ${i.p.quantity > 1 ? `<div class="qty"><button type="button" data-cq="-1" data-id="${esc(i.p.id)}" aria-label="Fewer">−</button><input value="${i.qty}" readonly aria-label="Quantity"><button type="button" data-cq="1" data-id="${esc(i.p.id)}" aria-label="More" ${i.qty >= i.p.available ? "disabled" : ""}>+</button></div>` : ""}
               <button class="linkish small" data-act="remove" data-id="${esc(i.p.id)}">Remove</button>
@@ -228,39 +243,25 @@ function viewCart(error = "") {
           </div>
           <div>${money(i.qty * i.p.suggested_cents)}</div>
         </div>`).join("")}
-        <div class="totals"><span>Suggested total</span><strong>${money(total)}</strong></div>
-        <p class="note">You won't pay on this site. After you check out, your pieces are reserved for you and we'll send you an <strong>invoice from FutureFund</strong>. Want to give extra? <a href="${esc(info.donate_url)}" target="_blank" rel="noopener">Make a separate donation</a>.</p>
+        <div class="totals"><span>Suggested donation</span><strong>${money(total)}</strong></div>
+        <div class="note"><strong>How it works:</strong> ${instructions()}</div>
       </div>
       <form class="panel" id="checkout" novalidate>
-        <h2 style="font-size:1.5rem">Check out</h2>
+        <h2 style="font-size:1.5rem">Reserve your pieces</h2>
         <div class="grid-2">
           <div class="field"><label for="first_name">First name <span class="req">*</span></label><input id="first_name" type="text" autocomplete="given-name" required value="${esc(saved.first_name)}"></div>
           <div class="field"><label for="last_name">Last name <span class="req">*</span></label><input id="last_name" type="text" autocomplete="family-name" required value="${esc(saved.last_name)}"></div>
         </div>
-        <div class="field"><label for="email">Email <span class="req">*</span></label><input id="email" type="email" autocomplete="email" required value="${esc(saved.email)}"><div class="hint">Your FutureFund invoice will be sent here.</div></div>
+        <div class="field"><label for="email">Email <span class="req">*</span></label><input id="email" type="email" autocomplete="email" required value="${esc(saved.email)}"><div class="hint">So we can contact you about your reservation.</div></div>
         <div class="field"><label for="phone">Phone <span class="req">*</span></label><input id="phone" type="tel" autocomplete="tel" inputmode="tel" required value="${esc(saved.phone)}"></div>
-        <div class="grid-2">
-          <div class="field"><label for="student_name">Student name <span class="req">*</span></label><input id="student_name" type="text" required value="${esc(saved.student_name)}"></div>
-          <div class="field"><label for="student_class">Teacher / class <span class="req">*</span></label><input id="student_class" type="text" required value="${esc(saved.student_class)}"></div>
-        </div>
-        <div class="field"><label for="pickup">Pickup <span class="req">*</span></label>
-          <select id="pickup" required>
-            <option value="">Choose a pickup option…</option>
-            ${opts.map((o) => `<option value="${esc(o.id)}" ${saved.pickup === o.id ? "selected" : ""}>${esc(pickupText(o))}</option>`).join("")}
-          </select>
-          <div class="hint" id="pickup-note"></div>
-        </div>
         <div class="field"><label for="notes">Notes <span class="muted small">(optional)</span></label><textarea id="notes" rows="3">${esc(saved.notes)}</textarea></div>
         <p class="note note-bad ${error ? "" : "hidden"}" role="alert" id="form-error">${esc(error)}</p>
         ${canCheckout()
-          ? `<button class="btn btn-accent btn-block" type="submit">Place order · ${money(total)}</button>`
-          : `<p class="note note-warn">Ordering is closed right now.</p>`}
+          ? `<button class="btn btn-accent btn-block" type="submit">Reserve · ${money(total)}</button>
+             <p class="small muted" style="margin:10px 0 0;text-align:center">You won't pay on this site. You'll donate on FutureFund next.</p>`
+          : `<p class="note note-warn">Reservations are closed right now.</p>`}
       </form>
     </div></div>`);
-
-  const sel = document.getElementById("pickup");
-  const showNote = () => { const o = opts.find((x) => x.id === sel.value); document.getElementById("pickup-note").textContent = o?.note ?? ""; };
-  sel.addEventListener("change", showNote); showNote();
 
   // Remember everything typed, so nothing is lost if the cart re-renders.
   const form = document.getElementById("checkout");
@@ -273,57 +274,46 @@ function viewCart(error = "") {
   form.addEventListener("input", remember);
   form.addEventListener("change", remember);
 
-  document.getElementById("checkout").addEventListener("submit", async (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = (id) => document.getElementById(id).value.trim();
     const order = {
       first_name: f("first_name"), last_name: f("last_name"),
       parent_name: `${f("first_name")} ${f("last_name")}`.trim(), email: f("email"), phone: f("phone"),
-      student_name: f("student_name"), student_class: f("student_class"),
-      pickup_option_id: f("pickup"), notes: f("notes"),
+      notes: f("notes"),
       items: cart.get().map(({ piece_id, qty }) => ({ piece_id, qty })),
     };
-    const missing = ["first_name", "last_name", "email", "phone", "student_name", "student_class", "pickup"].filter((k) => !f(k));
+    const missing = ["first_name", "last_name", "email", "phone"].filter((k) => !f(k));
     form.querySelectorAll("[aria-invalid]").forEach((el) => el.removeAttribute("aria-invalid"));
     const errBox = document.getElementById("form-error");
-    if (missing.length) {
-      missing.forEach((k) => document.getElementById(k).setAttribute("aria-invalid", "true"));
-      errBox.textContent = "Please fill in the fields marked in red.";
+    const fail = (id, msg) => {
+      [].concat(id).forEach((k) => document.getElementById(k).setAttribute("aria-invalid", "true"));
+      errBox.textContent = msg;
       errBox.classList.remove("hidden");
-      document.getElementById(missing[0]).focus();
-      return;
-    }
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(order.email)) {
-      document.getElementById("email").setAttribute("aria-invalid", "true");
-      errBox.textContent = "Please check the email address.";
-      errBox.classList.remove("hidden");
-      document.getElementById("email").focus();
-      return;
-    }
-    if (order.phone.replace(/\D/g, "").length < 7) {
-      document.getElementById("phone").setAttribute("aria-invalid", "true");
-      errBox.textContent = "Please check the phone number.";
-      errBox.classList.remove("hidden");
-      document.getElementById("phone").focus();
-      return;
-    }
+      document.getElementById([].concat(id)[0]).focus();
+    };
+    if (missing.length) return fail(missing, "Please fill in the fields marked in red.");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(order.email)) return fail("email", "Please check the email address.");
+    if (order.phone.replace(/\D/g, "").length < 7) return fail("phone", "Please check the phone number.");
     errBox.classList.add("hidden");
-    try { localStorage.setItem("ceramics-contact", JSON.stringify({ ...order, pickup: order.pickup_option_id, items: undefined, notes: undefined })); } catch {}
+    try { localStorage.setItem("ceramics-contact", JSON.stringify({ first_name: order.first_name, last_name: order.last_name, email: order.email, phone: order.phone })); } catch {}
 
     const btn = e.target.querySelector("button[type=submit]");
-    btn.disabled = true; btn.textContent = "Placing order…";
+    btn.disabled = true; btn.textContent = "Reserving…";
     try {
       const { first_name, last_name, ...payload } = order;
       const res = await api.placeOrder(payload);
       const summary = {
-        ...res, email: order.email,
+        ...res, name: order.parent_name, email: order.email, phone: order.phone, notes: order.notes,
+        placed_at: new Date().toISOString(),
         items: items.map((i) => ({ title: i.p.title, artist: i.p.artist, qty: i.qty, cents: i.qty * i.p.suggested_cents, photo: i.p.photos?.[0] })),
-        total, pickup: pickupText(opts.find((o) => o.id === order.pickup_option_id) ?? {}),
+        total,
       };
       try { sessionStorage.setItem(LAST_ORDER_KEY, JSON.stringify(summary)); } catch {}
       cart.set([]);
       draft = {};
       await loadGallery();
+      receiptPending = true;
       location.hash = `#/thanks/${encodeURIComponent(res.order_no)}`;
     } catch (err) {
       const msg = friendlyError(err);
@@ -338,29 +328,96 @@ function viewThanks(orderNo) {
   let s = null;
   try { s = JSON.parse(sessionStorage.getItem(LAST_ORDER_KEY) || "null"); } catch {}
   if (!s || s.order_no !== orderNo) s = { order_no: orderNo, items: [] };
-  document.title = `Thank you — ${info.fundraiser_name}`;
-  app.innerHTML = shell(`<div class="wrap page" style="max-width:720px">
-    <div class="eyebrow">Order ${esc(s.order_no)}</div>
-    <h1>Thank you!</h1>
-    <p class="lead muted" style="font-size:1.1rem">Your pieces are reserved for you.${s.email ? ` Your FutureFund invoice will be sent to <strong>${esc(s.email)}</strong>.` : ""} Please keep your order number for your records.</p>
-    <div class="panel" style="margin:26px 0">
-      <h3>What happens next</h3>
-      <ol style="padding-left:20px;margin:0">
-        <li>We'll send you an <strong>invoice from FutureFund</strong> shortly. Look for order number <strong>${esc(s.order_no)}</strong> in the memo.</li>
-        <li>Pay the invoice in FutureFund.</li>
-        <li>Pick up your pieces${s.pickup ? `: <strong>${esc(s.pickup)}</strong>` : "."}</li>
-      </ol>
+  document.title = `Reservation ${s.order_no} — ${info.fundraiser_name}`;
+  const place = pickupPlace();
+  app.innerHTML = shell(`<div class="wrap page receipt" style="max-width:760px">
+    <div class="print-only print-head">${logo("sm")}<div><strong>${esc(info.fundraiser_name)}</strong><br><span class="muted">Reservation confirmation</span></div></div>
+
+    <div class="save-alert no-print" role="alert">
+      <div>
+        <strong>Save this page now.</strong> You will <u>not</u> receive a confirmation email.
+        Print it or save it as a PDF to keep your reservation number and instructions.
+      </div>
+      <button class="btn btn-accent" data-act="print">Print / Save as PDF</button>
     </div>
-    ${s.items.length ? `<div>${s.items.map((i) => `
+
+    <div class="eyebrow">Reservation ${esc(s.order_no)}</div>
+    <h1>You're reserved!</h1>
+    <p class="lead muted" style="font-size:1.1rem">Your pieces are set aside for you${s.name ? `, ${esc(s.name.split(" ")[0])}` : ""}. Here's what to do next.</p>
+
+    <div class="panel next-steps" style="margin:26px 0">
+      <h3>Next steps</h3>
+      <p style="margin:0 0 14px">${instructions()}</p>
+      <ol style="padding-left:20px;margin:0">
+        <li>Donate <strong>${money(s.total)}</strong> on FutureFund. If there's a note field, add your reservation number <strong>${esc(s.order_no)}</strong>.</li>
+        <li>Save your FutureFund receipt.</li>
+        <li>Bring the receipt to pick up your pieces before or after school on <strong>${esc(pickupDaysText(pickupOptions()))}</strong>${place ? ` in <strong>${esc(place)}</strong>` : ""}.</li>
+      </ol>
+      <div class="row no-print" style="margin-top:18px">
+        <a class="btn btn-accent" href="${esc(info.donate_url)}" target="_blank" rel="noopener">Donate ${money(s.total)} on FutureFund →</a>
+      </div>
+    </div>
+
+    ${s.items.length ? `<h3>Your reservation</h3>
+      <dl class="kv" style="margin:10px 0 16px">
+        <dt>Reservation</dt><dd><strong>${esc(s.order_no)}</strong></dd>
+        ${s.name ? `<dt>Name</dt><dd>${esc(s.name)}</dd>` : ""}
+        ${s.email ? `<dt>Email</dt><dd>${esc(s.email)}</dd>` : ""}
+        ${s.phone ? `<dt>Phone</dt><dd>${esc(s.phone)}</dd>` : ""}
+        ${s.placed_at ? `<dt>Reserved</dt><dd>${esc(fmtDateTime(s.placed_at))}</dd>` : ""}
+        ${s.notes ? `<dt>Notes</dt><dd>${esc(s.notes)}</dd>` : ""}
+      </dl>
+      <div>${s.items.map((i) => `
       <div class="line-item">${i.photo ? `<img src="${esc(i.photo)}" alt="">` : "<div></div>"}
-        <div><div class="t">${esc(i.title)}${i.qty > 1 ? ` × ${i.qty}` : ""}</div><div class="small muted">by ${esc(i.artist)}</div></div>
+        <div><div class="t">${esc(i.title)}${i.qty > 1 ? ` × ${i.qty}` : ""}</div><div class="small muted">${esc(credit(i.artist))}</div></div>
         <div>${money(i.cents)}</div></div>`).join("")}
-      <div class="totals"><span>Suggested total</span><strong>${money(s.total)}</strong></div></div>` : ""}
-    <div class="row" style="margin-top:20px">
+      <div class="totals"><span>Suggested donation</span><strong>${money(s.total)}</strong></div></div>` : ""}
+
+    <div class="row no-print" style="margin-top:20px">
+      <button class="btn btn-ghost" data-act="print">Print / Save as PDF</button>
       <a class="btn btn-ghost" href="#/">Back to the gallery</a>
-      <a class="btn btn-accent" href="${esc(info.donate_url)}" target="_blank" rel="noopener">Make an extra donation</a>
     </div></div>`);
 }
+
+// ───── "Did you save your reservation?" guard ─────
+function leaveGuard(onLeave) {
+  const box = document.createElement("div");
+  box.className = "lightbox guard";
+  box.setAttribute("role", "dialog");
+  box.setAttribute("aria-modal", "true");
+  box.innerHTML = `<div class="panel" style="max-width:460px;cursor:auto">
+    <h3>Did you save your reservation?</h3>
+    <p class="muted">You will <strong>not</strong> receive a confirmation email. Print or save this page as a PDF so you have your reservation number and pickup instructions.</p>
+    <div class="row" style="margin-top:16px">
+      <button class="btn btn-accent" data-g="print">Print / Save as PDF</button>
+      <button class="btn btn-ghost" data-g="stay">Stay on this page</button>
+    </div>
+    <p style="margin:14px 0 0"><button class="linkish small" data-g="leave">Leave without saving</button></p>
+  </div>`;
+  box.addEventListener("click", (e) => {
+    const g = e.target.closest("[data-g]")?.dataset.g;
+    if (!g && e.target !== box) return;
+    box.remove();
+    if (g === "print") window.print();
+    if (g === "leave") { receiptPending = false; onLeave(); }
+  });
+  document.body.appendChild(box);
+  box.querySelector("[data-g=print]").focus();
+}
+window.addEventListener("beforeunload", (e) => {
+  if (receiptPending && location.hash.startsWith("#/thanks")) { e.preventDefault(); e.returnValue = ""; }
+});
+window.addEventListener("afterprint", () => { receiptPending = false; });
+// Catch in-app links away from the reservation page.
+document.addEventListener("click", (e) => {
+  if (!receiptPending || !location.hash.startsWith("#/thanks")) return;
+  const a = e.target.closest("a[href]");
+  const so = e.target.closest("[data-act=signout]");
+  if (so) { e.preventDefault(); e.stopImmediatePropagation(); leaveGuard(async () => { await api.familySignOut(); viewGate(); }); return; }
+  if (!a || a.target === "_blank") return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  leaveGuard(() => { location.href = a.href; });
+}, true);
 
 // ───── Router & events ─────
 async function loadGallery() { gallery = await api.getGallery(); }
@@ -405,6 +462,7 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "remove": cart.set(cart.get().filter((i) => i.piece_id !== t.dataset.id)); viewCart(); break;
+    case "print": window.print(); break;
     case "zoom": {
       const src = document.getElementById("main-img")?.src;
       if (!src) return;

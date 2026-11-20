@@ -4,7 +4,7 @@
 import { resizeImage, blobToDataUrl, saleState } from "./util.js";
 import { seedDemo } from "./demo-seed.js";
 
-const KEY = "ceramics-demo-v1";
+const KEY = "ceramics-demo-v2";
 const SESSION = "ceramics-demo-session";
 export const DEMO_FAMILY_PASSWORD = "clay";
 export const DEMO_ADMIN_PASSWORD = "demo";
@@ -61,7 +61,7 @@ export function createDemoBackend() {
       return {
         fundraiser_name: s.fundraiser_name, school_name: s.school_name, intro: s.intro,
         sale_opens_at: s.sale_opens_at, sale_closes_at: s.sale_closes_at, sale_state: saleState(s),
-        donate_url: s.donate_url,
+        donate_url: s.donate_url, instructions: s.instructions,
       };
     },
     async familySession() { return isMember(); },
@@ -89,11 +89,9 @@ export function createDemoBackend() {
       const db = load();
       if (!isMember()) throw new Error("NOT_SIGNED_IN");
       if (saleState(db.settings) !== "open") throw new Error("SALE_NOT_OPEN");
-      if (![o.parent_name, o.email, o.phone, o.student_name, o.student_class].every((v) => String(v ?? "").trim())) throw new Error("MISSING_FIELDS");
+      if (![o.parent_name, o.email, o.phone].every((v) => String(v ?? "").trim())) throw new Error("MISSING_FIELDS");
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(o.email)) throw new Error("BAD_EMAIL");
       if (!o.items?.length) throw new Error("EMPTY_CART");
-      const pickup = db.pickupOptions.find((p) => p.id === o.pickup_option_id && p.active);
-      if (!pickup) throw new Error("BAD_PICKUP");
       const st = stock(db);
       const items = [];
       for (const it of o.items) {
@@ -104,8 +102,8 @@ export function createDemoBackend() {
       const order = {
         id: uid(), order_no: "CER-" + db.nextOrderNo++, created_at: new Date().toISOString(),
         parent_name: o.parent_name.trim(), email: o.email.trim().toLowerCase(), phone: (o.phone || "").trim(),
-        student_name: o.student_name.trim(), student_class: o.student_class.trim(),
-        pickup_option_id: pickup.id, pickup_label: pickup.label, notes: (o.notes || "").trim(),
+        student_name: "", student_class: "", pickup_option_id: null, pickup_label: "",
+        notes: (o.notes || "").trim(), picked_up_at: null,
         status: "new", seen_at: null, invoice_sent_at: null, paid_at: null, amount_received_cents: null,
         released_at: null, notified_at: new Date().toISOString(), order_items: items,
       };
@@ -151,7 +149,10 @@ export function createDemoBackend() {
         case "seen": o.seen_at ||= now; break;
         case "invoice_sent": Object.assign(o, { status: "invoice_sent", invoice_sent_at: now, seen_at: o.seen_at || now }); log("Invoice sent"); break;
         case "paid": Object.assign(o, { status: "paid", paid_at: now, amount_received_cents: data.amount_cents, seen_at: o.seen_at || now }); log("Marked paid", `$${(data.amount_cents / 100).toFixed(2)}`); break;
-        case "unpaid": Object.assign(o, { status: "invoice_sent", paid_at: null, amount_received_cents: null, invoice_sent_at: o.invoice_sent_at || now }); log("Payment undone"); break;
+        case "unpaid": Object.assign(o, { status: "new", paid_at: null, amount_received_cents: null, picked_up_at: null }); log("Payment undone"); break;
+        case "paid_picked_up": Object.assign(o, { status: "paid", paid_at: now, picked_up_at: now, amount_received_cents: data.amount_cents, seen_at: o.seen_at || now }); log("Receipt checked — paid and picked up", `$${(data.amount_cents / 100).toFixed(2)}`); break;
+        case "picked_up": Object.assign(o, { picked_up_at: now }); log("Picked up"); break;
+        case "unpicked": Object.assign(o, { picked_up_at: null }); log("Pickup undone"); break;
         case "release": o.order_items.forEach((i) => (i.released = true)); Object.assign(o, { status: "released", released_at: now, seen_at: o.seen_at || now }); log("Order released", "All pieces back on sale"); break;
         case "release_item": {
           const it = o.order_items.find((i) => i.id === data.item.id); it.released = true;

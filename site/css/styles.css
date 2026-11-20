@@ -7,7 +7,8 @@
   --ink-3: #8a857c;
   --line: #e4e0d8;
   --line-2: #d3cdc2;
-  --accent: #9a5b3c;          /* clay — swap for a school color */
+  --accent: #c2410c;          /* Cal High orange, deepened for readable text and buttons */
+  --school-orange: #ef5423;   /* Cal High orange (decorative) */
   --accent-ink: #ffffff;
   --ok: #3e6b4f;
   --ok-bg: #e7efe8;
@@ -118,7 +119,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--i
 .goal { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
 .goal .amount { font-variant-numeric: lining-nums tabular-nums; font-family: var(--serif); font-size: 2.2rem; line-height: 1; }
 .progress { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 14px 0 10px; }
-.progress > span { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width .6s ease; }
+.progress > span { display: block; height: 100%; background: var(--school-orange); border-radius: 4px; transition: width .6s ease; }
 
 /* Filters */
 .filters { display: flex; gap: 8px; flex-wrap: wrap; padding: 6px 0 26px; border-top: 1px solid var(--line); padding-top: 22px; align-items: center; }
@@ -281,3 +282,42 @@ dialog { border: 0; border-radius: 10px; padding: 0; max-width: min(560px, 94vw)
 dialog::backdrop { background: rgba(20,19,17,.45); }
 dialog .dlg-body { padding: 24px; }
 dialog .dlg-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 0 24px 24px; }
+
+/* ───────────── Cal High branding ───────────── */
+.school-band { background: #000; display: flex; justify-content: center; padding: 10px 16px; }
+.school-band img { height: 64px; width: auto; max-width: 100%; object-fit: contain; }
+@media (max-width: 560px) { .school-band img { height: 40px; } }
+.logo { border-radius: 50%; background: #fff; object-fit: cover; }
+.logo-sm { width: 52px; height: 52px; }
+.logo-lg { width: 150px; height: 150px; margin: 0 auto 18px; box-shadow: var(--shadow); }
+.brand-logo { flex-direction: row; align-items: center; gap: 12px; }
+.brand-text { display: flex; flex-direction: column; line-height: 1.1; }
+.site-header { border-bottom: 3px solid var(--school-orange); }
+@media (max-width: 560px) { .logo-sm { width: 40px; height: 40px; } }
+
+.how { margin: 18px 0 14px; padding-left: 22px; color: var(--ink-2); }
+.how li { margin: 4px 0; }
+
+.save-alert { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  background: #fff4ec; border: 2px solid var(--school-orange); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 28px; }
+.save-alert div { flex: 1; min-width: 240px; }
+.next-steps p a { color: var(--accent); }
+.guard { cursor: default; }
+
+.print-only { display: none; }
+.print-head { display: none; align-items: center; gap: 14px; margin-bottom: 18px; }
+
+@media print {
+  .no-print, .site-header, .footer, .banner, #toasts, .lightbox { display: none !important; }
+  .print-only { display: block; }
+  .print-head { display: flex !important; }
+  body { background: #fff; color: #000; font-size: 12pt; }
+  .page { padding: 0 !important; }
+  .wrap { max-width: none; padding: 0; }
+  .panel { border: 1px solid #999; box-shadow: none; }
+  .line-item img { width: 50px; }
+  a { color: #000; }
+  .next-steps a::after { content: ""; }
+}
+
+.pill-picked { background: #e3e8f4; color: #2e4476; }

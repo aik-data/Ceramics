@@ -3,13 +3,14 @@ import { getApi } from "./api.js";
 import {
   esc, money, toCents, toDollars, fmtDateTime, fmtDate, pickupText, ago, toast, friendlyError,
   isoToLocalInput, localInputToIso, downloadCsv, parseCsv, orderTotal,
+  instructionsText, instructionsHtml, pickupDaysText, DEFAULT_INSTRUCTIONS, DEFAULT_CREDIT, credit,
 } from "./util.js";
 
 const app = document.getElementById("app");
 const dlg = document.getElementById("dlg");
 let api, me, D = null, pollTimer = null, knownOrderIds = null;
 
-const STATUS_LABEL = { new: "New", invoice_sent: "Invoice sent", paid: "Paid", released: "Released" };
+const STATUS_LABEL = { new: "Reserved", invoice_sent: "Reserved", paid: "Paid", released: "Released" };
 const SALE_LABEL = { upcoming: "Coming soon", open: "Open", paused: "Checkout paused", closed: "Closed" };
 
 // ───── Data helpers ─────
@@ -18,15 +19,18 @@ async function reload() {
   D.orderById = Object.fromEntries(D.orders.map((o) => [o.id, o]));
   if (knownOrderIds) {
     const fresh = D.orders.filter((o) => !knownOrderIds.has(o.id));
-    if (fresh.length) toast(fresh.length === 1 ? `New order ${fresh[0].order_no} from ${fresh[0].parent_name}` : `${fresh.length} new orders`, "ok");
+    if (fresh.length) toast(fresh.length === 1 ? `New reservation ${fresh[0].order_no} from ${fresh[0].parent_name}` : `${fresh.length} new reservations`, "ok");
   }
   knownOrderIds = new Set(D.orders.map((o) => o.id));
 }
+// Unpaid reservations get flagged after the overdue window (counted from when they reserved).
 const isOverdue = (o) =>
-  o.status === "invoice_sent" && o.invoice_sent_at &&
-  Date.now() - new Date(o.invoice_sent_at).getTime() > (D.settings.overdue_hours || 48) * 3600e3;
-const unread = () => D.orders.filter((o) => !o.seen_at && o.status === "new");
-const pill = (o) => `<span class="pill pill-${o.status}">${STATUS_LABEL[o.status]}</span>${isOverdue(o) ? ` <span class="pill pill-overdue">Overdue</span>` : ""}`;
+  (o.status === "new" || o.status === "invoice_sent") &&
+  Date.now() - new Date(o.created_at).getTime() > (D.settings.overdue_hours || 48) * 3600e3;
+const unread = () => D.orders.filter((o) => !o.seen_at && (o.status === "new" || o.status === "invoice_sent"));
+const pill = (o) => o.status === "paid" && o.picked_up_at
+  ? `<span class="pill pill-picked">Picked up</span>`
+  : `<span class="pill pill-${o.status === "invoice_sent" ? "new" : o.status}">${STATUS_LABEL[o.status]}</span>${isOverdue(o) ? ` <span class="pill pill-overdue">Overdue</span>` : ""}`;
 const activeItems = (o) => o.order_items.filter((i) => !i.released);
 
 function stats() {
@@ -34,7 +38,8 @@ function stats() {
   const donations = D.donations.reduce((s, d) => s + d.amount_cents, 0);
   const open = D.orders.filter((o) => o.status === "new" || o.status === "invoice_sent");
   const units = D.pieces.filter((p) => !p.hidden).reduce((a, p) => ({ total: a.total + p.quantity, sold: a.sold + p.sold, held: a.held + p.held, avail: a.avail + Math.max(0, p.available) }), { total: 0, sold: 0, held: 0, avail: 0 });
-  return { sales, donations, raised: sales + donations, awaiting: open.reduce((s, o) => s + orderTotal(o), 0), openCount: open.length, units };
+  const toPickUp = D.orders.filter((o) => o.status === "paid" && !o.picked_up_at).length;
+  return { sales, donations, raised: sales + donations, awaiting: open.reduce((s, o) => s + orderTotal(o), 0), openCount: open.length, units, toPickUp };
 }
 
 // ───── Dialog helper ─────
@@ -66,7 +71,7 @@ function shell(active, inner) {
   const s = D.settings;
   const nav = [
     ["dashboard", "#/", "Dashboard"],
-    ["orders", "#/orders/new", `Orders ${n ? `<span class="badge-count">${n}</span>` : ""}`],
+    ["orders", "#/orders/reserved", `Reservations ${n ? `<span class="badge-count">${n}</span>` : ""}`],
     ["listings", "#/listings", "Listings"],
     ["donations", "#/donations", "Donations"],
     ["settings", "#/settings", "Settings"],
@@ -149,7 +154,7 @@ function viewDashboard() {
     <div class="admin-top"><h1>Dashboard</h1><span class="spacer"></span><button class="btn btn-ghost btn-sm" data-act="refresh">Refresh</button></div>
 
     ${news.length ? `<section class="alert-new" aria-live="polite">
-      <h2>New orders (${news.length})</h2>
+      <h2>New reservations (${news.length})</h2>
       <div class="table-wrap"><table class="list"><tbody>
       ${news.map((o) => `<tr class="clickable" data-href="#/order/${o.id}">
         <td><span class="unread-dot"></span><strong>${esc(o.order_no)}</strong></td><td>${esc(o.parent_name)}</td>
@@ -160,21 +165,22 @@ function viewDashboard() {
     <div class="tiles">
       <div class="tile"><div class="k">Total raised</div><div class="v">${money(st.raised)}</div><div class="s">${money(st.sales)} sales + ${money(st.donations)} donations</div></div>
       <div class="tile"><div class="k">Net profit</div><div class="v">${money(net)}</div><div class="s">${s.expenses_cents ? `after ${money(s.expenses_cents)} expenses` : `No expenses entered · <a href="#/settings">add</a>`}</div></div>
-      <div class="tile"><div class="k">Awaiting payment</div><div class="v">${money(st.awaiting)}</div><div class="s">${st.openCount} open order${st.openCount === 1 ? "" : "s"}</div></div>
-      <div class="tile"><div class="k">Pieces</div><div class="v">${st.units.sold} sold</div><div class="s">${st.units.held} on hold · ${st.units.avail} available of ${st.units.total}</div></div>
+      <div class="tile"><div class="k">Awaiting donation</div><div class="v">${money(st.awaiting)}</div><div class="s">${st.openCount} reservation${st.openCount === 1 ? "" : "s"} not yet marked paid</div></div>
+      <div class="tile"><div class="k">To pick up</div><div class="v">${st.toPickUp}</div><div class="s">paid reservation${st.toPickUp === 1 ? "" : "s"} waiting for pickup</div></div>
+      <div class="tile"><div class="k">Pieces</div><div class="v">${st.units.sold} sold</div><div class="s">${st.units.held} reserved · ${st.units.avail} available of ${st.units.total}</div></div>
     </div>
 
     <div class="panel" style="margin-bottom:22px">
       <div class="row"><strong>Goal progress</strong><span class="spacer"></span><span class="muted small">${money(st.raised)} of ${money(s.goal_cents)} · ${pct}%</span></div>
       <div class="progress"><span style="width:${pct}%"></span></div>
-      <div class="small muted">Shown to families on the gallery page. Includes paid orders and recorded donations.</div>
+      <div class="small muted">Shown to families on the gallery page. Includes paid reservations and recorded donations.</div>
     </div>
 
     ${overdue.length ? `<div class="panel" style="margin-bottom:22px">
-      <h3 class="section-title">Overdue — invoice sent more than ${s.overdue_hours} hours ago</h3>
+      <h3 class="section-title">Overdue — reserved more than ${s.overdue_hours} hours ago, not marked paid</h3>
       <div class="table-wrap"><table class="list"><tbody>${overdue.map((o) => `
         <tr class="clickable" data-href="#/order/${o.id}"><td><strong>${esc(o.order_no)}</strong></td><td>${esc(o.parent_name)}</td>
-        <td class="num">${money(orderTotal(o))}</td><td class="small muted">Invoiced ${ago(o.invoice_sent_at)}</td></tr>`).join("")}
+        <td class="num">${money(orderTotal(o))}</td><td class="small muted">Reserved ${ago(o.created_at)}</td></tr>`).join("")}
       </tbody></table></div></div>` : ""}
 
     <div class="panel">
@@ -187,35 +193,55 @@ function viewDashboard() {
     </div>`);
 }
 
-// ───── Orders ─────
-function viewOrders(tab = "new") {
-  const tabs = [["new", "New"], ["invoice_sent", "Invoice sent"], ["paid", "Paid"], ["released", "Released"], ["all", "All"]];
-  const list = D.orders.filter((o) => tab === "all" || o.status === tab);
+// ───── Orders (reservations) ─────
+const isOpen = (o) => o.status === "new" || o.status === "invoice_sent";
+const tabMatch = (o, tab) =>
+  tab === "all" ? true :
+  tab === "reserved" ? isOpen(o) :
+  tab === "paid" ? o.status === "paid" && !o.picked_up_at :
+  tab === "picked_up" ? o.status === "paid" && !!o.picked_up_at :
+  o.status === tab;
+
+function viewOrders(tab = "reserved") {
+  if (tab === "new" || tab === "invoice_sent") tab = "reserved";
+  const tabs = [["reserved", "Reserved"], ["paid", "Paid — to pick up"], ["picked_up", "Picked up"], ["released", "Released"], ["all", "All"]];
+  const list = D.orders.filter((o) => tabMatch(o, tab));
   app.innerHTML = shell("orders", `
-    <div class="admin-top"><h1>Orders</h1><span class="spacer"></span><button class="btn btn-ghost btn-sm" data-act="refresh">Refresh</button></div>
-    <nav class="tabs">${tabs.map(([k, l]) => `<a href="#/orders/${k}" aria-current="${k === tab}">${l}<span class="n">${k === "all" ? D.orders.length : D.orders.filter((o) => o.status === k).length}</span></a>`).join("")}</nav>
+    <div class="admin-top"><h1>Reservations</h1><span class="spacer"></span><button class="btn btn-ghost btn-sm" data-act="refresh">Refresh</button></div>
+    <nav class="tabs">${tabs.map(([k, l]) => `<a href="#/orders/${k}" aria-current="${k === tab}">${l}<span class="n">${D.orders.filter((o) => tabMatch(o, k)).length}</span></a>`).join("")}</nav>
     ${list.length ? `<div class="table-wrap"><table class="list">
-      <thead><tr><th>Order</th><th>Family</th><th>Student</th><th>Items</th><th class="num">Total</th><th>Status</th><th>Placed</th></tr></thead>
+      <thead><tr><th>Reservation</th><th>Name</th><th>Phone</th><th>Items</th><th class="num">Total</th><th>Status</th><th>Reserved</th></tr></thead>
       <tbody>${list.map((o) => `<tr class="clickable" data-href="#/order/${o.id}">
-        <td>${!o.seen_at && o.status === "new" ? `<span class="unread-dot" title="Unread"></span>` : ""}<strong>${esc(o.order_no)}</strong></td>
+        <td>${!o.seen_at && isOpen(o) ? `<span class="unread-dot" title="Unread"></span>` : ""}<strong>${esc(o.order_no)}</strong></td>
         <td>${esc(o.parent_name)}<div class="small muted">${esc(o.email)}</div></td>
-        <td>${esc(o.student_name)}<div class="small muted">${esc(o.student_class)}</div></td>
+        <td>${esc(o.phone)}</td>
         <td>${activeItems(o).map((i) => esc(i.title) + (i.qty > 1 ? ` ×${i.qty}` : "")).join(", ") || `<span class="muted">—</span>`}</td>
         <td class="num">${money(o.status === "paid" ? o.amount_received_cents : orderTotal(o))}</td>
         <td>${pill(o)}</td>
         <td class="small muted">${ago(o.created_at)}</td></tr>`).join("")}</tbody></table></div>`
-      : `<div class="panel empty">No ${tab === "all" ? "" : STATUS_LABEL[tab].toLowerCase() + " "}orders.</div>`}`);
+      : `<div class="panel empty">Nothing here yet.</div>`}`);
 }
 
-function invoiceText(o) {
+// A complete, forward-ready summary of a reservation (same details as the alert email).
+function reservationText(o) {
+  const s = D.settings;
   const items = activeItems(o);
   return [
-    `Bill to: ${o.parent_name} <${o.email}>`,
-    `Memo: ${o.order_no}`,
+    `Reservation ${o.order_no} — ${s.fundraiser_name}`,
+    `Reserved: ${fmtDateTime(o.created_at)}`,
     ``,
-    ...items.map((i) => `• ${i.title}${i.qty > 1 ? ` × ${i.qty}` : ""} (by ${i.artist}) — ${money(i.qty * i.suggested_cents)}`),
+    `Name: ${o.parent_name}`,
+    `Email: ${o.email}`,
+    `Phone: ${o.phone}`,
+    ...(o.notes ? [`Notes: ${o.notes}`] : []),
     ``,
-    `Total: ${money(orderTotal(o))}`,
+    `Items:`,
+    ...items.map((i) => `• ${i.title}${i.qty > 1 ? ` × ${i.qty}` : ""} — ${money(i.qty * i.suggested_cents)} suggested`),
+    `Suggested donation total: ${money(orderTotal(o))}`,
+    ``,
+    `Next steps:`,
+    instructionsText(s.instructions, s.donate_url, D.pickupOptions),
+    `Please include your reservation number ${o.order_no} with your donation if FutureFund lets you add a note.`,
   ].join("\n");
 }
 function mailto(o, subject, body) {
@@ -224,43 +250,48 @@ function mailto(o, subject, body) {
 
 async function viewOrder(id) {
   let o = D.orderById[id];
-  if (!o) { app.innerHTML = shell("orders", `<div class="panel empty">Order not found. <a href="#/orders/all">All orders</a></div>`); return; }
+  if (!o) { app.innerHTML = shell("orders", `<div class="panel empty">Reservation not found. <a href="#/orders/all">All reservations</a></div>`); return; }
   if (!o.seen_at) { await api.orderAction(o, "seen"); await reload(); o = D.orderById[id]; }
   const items = o.order_items;
   const log = D.activity.filter((a) => a.order_id === o.id);
-  const open = o.status === "new" || o.status === "invoice_sent";
+  const open = isOpen(o);
+  const first = o.parent_name.split(" ")[0];
 
   let actions = "";
-  if (o.status === "new") actions = `
-    <button class="btn btn-block" data-act="copy-invoice">Copy invoice details</button>
-    <p class="small muted" style="margin:0">Paste into a new FutureFund invoice. Put <strong>${esc(o.order_no)}</strong> in the memo.</p>
-    <button class="btn btn-accent btn-block" data-act="invoice-sent">Mark invoice sent</button>`;
-  if (o.status === "invoice_sent") actions = `
+  if (open) actions = `
     <button class="btn btn-accent btn-block" data-act="mark-paid">Mark paid…</button>
-    <button class="btn btn-ghost btn-block" data-act="copy-invoice">Copy invoice details</button>
-    <a class="btn btn-ghost btn-block" href="${esc(mailto(o, `Reminder: ceramics order ${o.order_no}`, `Hi ${o.parent_name.split(" ")[0]},\n\nThis is a friendly reminder that the FutureFund invoice for your ceramics order ${o.order_no} is still open. Your pieces are being held for you.\n\nThank you for supporting our student artists!`))}">Email a reminder</a>`;
-  if (o.status === "paid") actions = `
+    <p class="small muted" style="margin:0">Use when you see their donation in FutureFund.</p>
+    <button class="btn btn-block" data-act="paid-picked-up">Receipt checked — paid &amp; picked up…</button>
+    <p class="small muted" style="margin:0">Use at the pickup table when they show their receipt.</p>
+    <button class="btn btn-ghost btn-block" data-act="copy-details">Copy reservation details</button>
+    <a class="btn btn-ghost btn-block" href="${esc(mailto(o, `Your ceramics reservation ${o.order_no}`, `Hi ${first},\n\nThank you for reserving with ${D.settings.fundraiser_name}! Here are your reservation details.\n\n${reservationText(o)}\n\nThank you for supporting our student artists!`))}">Email the family their details</a>`;
+  if (o.status === "paid" && !o.picked_up_at) actions = `
     <p class="note note-ok" style="margin:0">Paid ${money(o.amount_received_cents)} · ${fmtDateTime(o.paid_at)}</p>
+    <button class="btn btn-accent btn-block" data-act="picked-up">Mark picked up</button>
+    <button class="btn btn-ghost btn-block" data-act="copy-details">Copy reservation details</button>
     <button class="btn btn-ghost btn-block btn-sm" data-act="unpaid">Undo — mark as not paid</button>`;
+  if (o.status === "paid" && o.picked_up_at) actions = `
+    <p class="note note-ok" style="margin:0">Paid ${money(o.amount_received_cents)} · Picked up ${fmtDateTime(o.picked_up_at)}</p>
+    <button class="btn btn-ghost btn-block btn-sm" data-act="unpicked">Undo pickup</button>`;
   if (o.status === "released") actions = `<p class="note" style="margin:0">Released ${fmtDateTime(o.released_at)}. These pieces are back on sale.</p>`;
-  if (open) actions += `<button class="btn btn-danger btn-block" data-act="release">Release order…</button>`;
+  if (open) actions += `
+    <a class="btn btn-ghost btn-block" href="${esc(mailto(o, `Reminder: ceramics reservation ${o.order_no}`, `Hi ${first},\n\nThis is a friendly reminder that your ceramics reservation ${o.order_no} is waiting for your donation of ${money(orderTotal(o))}.\n\n${instructionsText(D.settings.instructions, D.settings.donate_url, D.pickupOptions)}\n\nThank you for supporting our student artists!`))}">Email a reminder</a>
+    <button class="btn btn-danger btn-block" data-act="release">Release reservation…</button>`;
 
   app.innerHTML = shell("orders", `
-    <a class="back" href="#/orders/${o.status}" style="margin-top:0">← Orders</a>
-    <div class="admin-top" style="margin-top:10px"><h1>${esc(o.order_no)}</h1>${pill(o)}<span class="spacer"></span><span class="muted small">Placed ${fmtDateTime(o.created_at)}</span></div>
+    <a class="back" href="#/orders/${open ? "reserved" : o.status === "paid" ? (o.picked_up_at ? "picked_up" : "paid") : o.status}" style="margin-top:0">← Reservations</a>
+    <div class="admin-top" style="margin-top:10px"><h1>${esc(o.order_no)}</h1>${pill(o)}<span class="spacer"></span><span class="muted small">Reserved ${fmtDateTime(o.created_at)}</span></div>
     <div class="order-grid">
       <div class="stack">
         <div class="panel">
-          <h3 class="section-title">Family</h3>
+          <h3 class="section-title">Contact</h3>
           <dl class="kv">
             <dt>Name</dt><dd>${esc(o.parent_name)}</dd>
             <dt>Email</dt><dd><a href="mailto:${esc(o.email)}">${esc(o.email)}</a></dd>
             ${o.phone ? `<dt>Phone</dt><dd><a href="tel:${esc(o.phone)}">${esc(o.phone)}</a></dd>` : ""}
-            <dt>Student</dt><dd>${esc(o.student_name)}</dd>
-            <dt>Teacher / class</dt><dd>${esc(o.student_class)}</dd>
-            <dt>Pickup</dt><dd>${esc(D.pickupOptions.find((p) => p.id === o.pickup_option_id) ? pickupText(D.pickupOptions.find((p) => p.id === o.pickup_option_id)) : o.pickup_label)}</dd>
+            ${o.student_name ? `<dt>Student</dt><dd>${esc(o.student_name)}${o.student_class ? ` — ${esc(o.student_class)}` : ""}</dd>` : ""}
+            ${o.pickup_label ? `<dt>Pickup</dt><dd>${esc(o.pickup_label)}</dd>` : ""}
             ${o.notes ? `<dt>Notes</dt><dd>${esc(o.notes)}</dd>` : ""}
-            ${o.invoice_sent_at ? `<dt>Invoice sent</dt><dd>${fmtDateTime(o.invoice_sent_at)} (${ago(o.invoice_sent_at)})</dd>` : ""}
           </dl>
         </div>
         <div class="panel">
@@ -270,7 +301,7 @@ async function viewOrder(id) {
             return `<div class="line-item" style="${i.released ? "opacity:.5" : ""}">
               ${p?.photos?.[0] ? `<img src="${esc(p.photos[0])}" alt="">` : "<div></div>"}
               <div><div class="t">${esc(i.title)}${i.released ? ` <span class="pill pill-released">Released</span>` : ""}</div>
-                <div class="small muted">by ${esc(i.artist)} · ${money(i.suggested_cents)} each</div>
+                <div class="small muted">${esc(credit(i.artist))} · ${money(i.suggested_cents)} each</div>
                 ${open && !i.released ? `<div class="row" style="margin-top:8px">
                   ${i.qty > 1 ? `<button class="btn btn-ghost btn-sm" data-act="qty-down" data-item="${i.id}">Reduce to ${i.qty - 1}</button>` : ""}
                   ${activeItems(o).length > 1 ? `<button class="btn btn-ghost btn-sm" data-act="release-item" data-item="${i.id}">Remove item</button>` : ""}
@@ -279,7 +310,7 @@ async function viewOrder(id) {
               <div style="text-align:right">${i.qty > 1 ? `<div class="small muted">× ${i.qty}</div>` : ""}${money(i.qty * i.suggested_cents)}</div>
             </div>`;
           }).join("")}
-          <div class="totals"><span>Invoice total</span><strong>${money(orderTotal(o))}</strong></div>
+          <div class="totals"><span>Suggested donation</span><strong>${money(orderTotal(o))}</strong></div>
         </div>
       </div>
       <div class="stack">
@@ -288,7 +319,7 @@ async function viewOrder(id) {
           <h3 class="section-title">History</h3>
           <ul class="timeline">
             ${log.map((a) => `<li><strong>${esc(a.action)}</strong>${a.detail ? ` — ${esc(a.detail)}` : ""}<div class="muted small">${esc(a.admin_email ?? "")} · ${fmtDateTime(a.at)}</div></li>`).join("")}
-            <li><strong>Order placed</strong><div class="muted small">${fmtDateTime(o.created_at)}</div></li>
+            <li><strong>Reserved</strong><div class="muted small">${fmtDateTime(o.created_at)}</div></li>
           </ul>
         </div>
       </div>
@@ -296,47 +327,53 @@ async function viewOrder(id) {
   app.dataset.order = o.id;
 }
 
+function amountDialog(o, title, button, action, msg) {
+  openDialog(`<div class="dlg-body"><h3>${esc(title)}</h3>
+    <div class="field"><label for="amt">Amount donated in FutureFund ($)</label>
+    <input id="amt" type="text" inputmode="decimal" value="${toDollars(orderTotal(o))}" required>
+    <div class="hint">Suggested total: ${money(orderTotal(o))}. Change it if they gave a different amount.</div></div></div>
+    <div class="dlg-foot"><button class="btn btn-ghost" data-cancel>Cancel</button><button class="btn btn-accent" type="submit">${esc(button)}</button></div>`,
+    { onSubmit: async (f) => {
+      const cents = toCents(f.querySelector("#amt").value);
+      if (cents <= 0) throw new Error("Enter the amount donated.");
+      await api.orderAction(o, action, { amount_cents: cents }); await reload(); toast(msg, "ok"); viewOrder(o.id);
+    } });
+}
+
 async function orderAct(act, el) {
   const o = D.orderById[app.dataset.order];
   const run = async (action, data, msg) => { await api.orderAction(o, action, data); await reload(); if (msg) toast(msg, "ok"); viewOrder(o.id); };
   switch (act) {
-    case "copy-invoice":
-      try { await navigator.clipboard.writeText(invoiceText(o)); toast("Invoice details copied", "ok"); }
+    case "copy-details":
+      try { await navigator.clipboard.writeText(reservationText(o)); toast("Reservation details copied", "ok"); }
       catch {
-        openDialog(`<div class="dlg-body"><h3>Invoice details</h3><textarea rows="10" readonly>${esc(invoiceText(o))}</textarea></div>
+        openDialog(`<div class="dlg-body"><h3>Reservation details</h3><textarea rows="14" readonly>${esc(reservationText(o))}</textarea></div>
           <div class="dlg-foot"><button class="btn" data-cancel>Done</button></div>`);
       }
       break;
-    case "invoice-sent": await run("invoice_sent", {}, "Marked invoice sent"); break;
-    case "mark-paid":
-      openDialog(`<div class="dlg-body"><h3>Mark ${esc(o.order_no)} paid</h3>
-        <div class="field"><label for="amt">Amount received in FutureFund ($)</label>
-        <input id="amt" type="text" inputmode="decimal" value="${toDollars(orderTotal(o))}" required>
-        <div class="hint">Invoice total: ${money(orderTotal(o))}. Change it if the payment was different.</div></div></div>
-        <div class="dlg-foot"><button class="btn btn-ghost" data-cancel>Cancel</button><button class="btn btn-accent" type="submit">Mark paid</button></div>`,
-        { onSubmit: async (f) => {
-          const cents = toCents(f.querySelector("#amt").value);
-          if (cents <= 0) throw new Error("Enter the amount received.");
-          await run("paid", { amount_cents: cents }, "Marked paid — pieces are now sold");
-        } });
+    case "mark-paid": amountDialog(o, `Mark ${o.order_no} paid`, "Mark paid", "paid", "Marked paid — pieces are now sold"); break;
+    case "paid-picked-up": amountDialog(o, `${o.order_no}: receipt checked`, "Paid & picked up", "paid_picked_up", "Marked paid and picked up"); break;
+    case "picked-up": await run("picked_up", {}, "Marked picked up"); break;
+    case "unpicked":
+      if (await confirmDialog("Undo pickup?", "The reservation goes back to “Paid — to pick up”.", "Undo pickup")) await run("unpicked", {}, "Pickup undone");
       break;
     case "unpaid":
-      if (await confirmDialog("Undo payment?", "The order goes back to “Invoice sent”. Its pieces stay on hold.", "Undo payment")) await run("unpaid", {}, "Payment undone");
+      if (await confirmDialog("Undo payment?", "The reservation goes back to “Reserved”. Its pieces stay on hold.", "Undo payment")) await run("unpaid", {}, "Payment undone");
       break;
     case "release":
       openDialog(`<div class="dlg-body"><h3>Release ${esc(o.order_no)}?</h3>
-        <p class="muted">All pieces in this order go back on sale and the order is closed. This can't be undone.</p>
+        <p class="muted">All pieces in this reservation go back on sale and it is closed. This can't be undone.</p>
         <label class="check"><input type="checkbox" id="mail" checked> Open an email to ${esc(o.parent_name)} afterward</label></div>
-        <div class="dlg-foot"><button class="btn btn-ghost" data-cancel>Cancel</button><button class="btn btn-danger" type="submit">Release order</button></div>`,
+        <div class="dlg-foot"><button class="btn btn-ghost" data-cancel>Cancel</button><button class="btn btn-danger" type="submit">Release reservation</button></div>`,
         { onSubmit: async (f) => {
           const mail = f.querySelector("#mail").checked;
-          await run("release", {}, "Order released — pieces are back on sale");
-          if (mail) location.href = mailto(o, `Your ceramics order ${o.order_no}`, `Hi ${o.parent_name.split(" ")[0]},\n\nWe've released the pieces from your ceramics order ${o.order_no}, since we didn't receive payment. If this is a mistake, just reply and we'll help.\n\nThank you!`);
+          await run("release", {}, "Reservation released — pieces are back on sale");
+          if (mail) location.href = mailto(o, `Your ceramics reservation ${o.order_no}`, `Hi ${o.parent_name.split(" ")[0]},\n\nWe've released the pieces from your ceramics reservation ${o.order_no}, since we didn't see a donation for it. If this is a mistake, just reply and we'll help.\n\nThank you!`);
         } });
       break;
     case "release-item": {
       const item = o.order_items.find((i) => i.id === el.dataset.item);
-      if (await confirmDialog("Remove item?", `“${esc(item.title)}” goes back on sale and is removed from this order.`, "Remove item", true)) await run("release_item", { item }, "Item removed");
+      if (await confirmDialog("Remove item?", `“${esc(item.title)}” goes back on sale and is removed from this reservation.`, "Remove item", true)) await run("release_item", { item }, "Item removed");
       break;
     }
     case "qty-down": {
@@ -358,13 +395,13 @@ function viewListings() {
       <thead><tr><th></th><th>Piece</th><th>Category</th><th class="num">Suggested</th><th class="num">Qty</th><th class="num">Available</th><th class="num">On hold</th><th class="num">Sold</th><th></th></tr></thead>
       <tbody>${pieces.map((p) => `<tr class="clickable" data-href="#/listing/${p.id}">
         <td style="width:60px">${p.photos?.[0] ? `<img class="thumb-sm" src="${esc(p.photos[0])}" alt="">` : `<div class="thumb-sm"></div>`}</td>
-        <td><strong>${esc(p.title)}</strong><div class="small muted">${esc(p.artist)}</div></td>
+        <td><strong>${esc(p.title)}</strong><div class="small muted">${esc(credit(p.artist))}</div></td>
         <td>${esc(p.category)}</td>
         <td class="num">${money(p.suggested_cents)}</td><td class="num">${p.quantity}</td>
         <td class="num">${Math.max(0, p.available)}</td><td class="num">${p.held}</td><td class="num">${p.sold}</td>
         <td>${p.hidden ? `<span class="pill pill-hidden">Hidden</span>` : ""}</td></tr>`).join("")}</tbody></table></div>`
       : `<div class="panel empty"><p>No pieces yet.</p><a class="btn" href="#/listing/new">Add your first piece</a></div>`}
-    <p class="small muted" style="margin-top:14px">CSV import columns: <code>title, artist, description, category, suggested, quantity</code> (with a header row). Photos are added afterward.</p>`);
+    <p class="small muted" style="margin-top:14px">CSV import columns: <code>title, description, category, suggested, quantity</code> (with a header row), plus an optional <code>artist</code> column — blank means “${esc(DEFAULT_CREDIT)}”. Photos are added afterward.</p>`);
 
   document.getElementById("csv").addEventListener("change", async (e) => {
     const file = e.target.files[0];
@@ -373,7 +410,7 @@ function viewListings() {
     const header = rows.shift()?.map((h) => h.trim().toLowerCase()) ?? [];
     const col = (r, k) => (r[header.indexOf(k)] ?? "").trim();
     const parsed = rows.map((r) => ({
-      title: col(r, "title"), artist: col(r, "artist"), description: col(r, "description"), category: col(r, "category"),
+      title: col(r, "title"), artist: col(r, "artist") || DEFAULT_CREDIT, description: col(r, "description"), category: col(r, "category"),
       suggested_cents: toCents(col(r, "suggested")), quantity: Math.max(1, parseInt(col(r, "quantity")) || 1), photos: [], hidden: false,
     })).filter((p) => p.title);
     if (!header.includes("title")) { toast("The CSV needs a header row with a “title” column.", "error"); return; }
@@ -387,7 +424,7 @@ function viewListings() {
 
 function viewListing(id) {
   const isNew = id === "new";
-  const p = isNew ? { title: "", artist: "", description: "", category: "", suggested_cents: 0, quantity: 1, photos: [], hidden: false, held: 0, sold: 0 } : D.pieces.find((x) => x.id === id);
+  const p = isNew ? { title: "", artist: DEFAULT_CREDIT, description: "", category: "", suggested_cents: 0, quantity: 1, photos: [], hidden: false, held: 0, sold: 0 } : D.pieces.find((x) => x.id === id);
   if (!p) { app.innerHTML = shell("listings", `<div class="panel empty">Piece not found.</div>`); return; }
   let photos = [...(p.photos || [])];
   const cats = [...new Set(D.pieces.map((x) => x.category).filter(Boolean))];
@@ -417,7 +454,7 @@ function viewListing(id) {
         <div class="hint">Photos are resized automatically. Please don't include students in photos.</div></div>
       <div class="grid-2">
         <div class="field"><label for="title">Title <span class="req">*</span></label><input id="title" type="text" required value="${esc(p.title)}"></div>
-        <div class="field"><label for="artist">Artist name <span class="req">*</span></label><input id="artist" type="text" required value="${esc(p.artist)}"><div class="hint">Shown exactly as typed.</div></div>
+        <div class="field"><label for="artist">Credit <span class="req">*</span></label><input id="artist" type="text" required value="${esc(p.artist)}"><div class="hint">Shown as “Handcrafted by …”. Keep it generic per school policy.</div></div>
         <div class="field"><label for="category">Category</label><input id="category" type="text" list="cats" value="${esc(p.category)}" placeholder="e.g. Mugs"><datalist id="cats">${cats.map((c) => `<option value="${esc(c)}">`).join("")}</datalist></div>
         <div class="field"><label for="suggested">Suggested donation ($) <span class="req">*</span></label><input id="suggested" type="text" inputmode="decimal" required value="${p.suggested_cents ? toDollars(p.suggested_cents) : ""}"></div>
         <div class="field"><label for="quantity">Quantity <span class="req">*</span></label><input id="quantity" type="number" min="${Math.max(1, committed)}" required value="${p.quantity}"><div class="hint">${committed ? `${p.held} on hold and ${p.sold} sold, so the minimum is ${committed}.` : "Use 1 for one-of-a-kind pieces."}</div></div>
@@ -488,7 +525,7 @@ function viewDonations() {
 
 // ───── Settings ─────
 function pickupDialog(o = {}) {
-  openDialog(`<div class="dlg-body"><h3>${o.id ? "Edit pickup option" : "Add pickup option"}</h3>
+  openDialog(`<div class="dlg-body"><h3>${o.id ? "Edit pickup day" : "Add pickup day"}</h3>
     <div class="field"><label for="pu-label">Label <span class="req">*</span></label><input id="pu-label" type="text" required value="${esc(o.label ?? "")}" placeholder="e.g. Spring Concert"></div>
     <div class="grid-2">
       <div class="field"><label for="pu-date">Date</label><input id="pu-date" type="date" value="${esc(o.pickup_date ?? "")}"></div>
@@ -498,7 +535,7 @@ function pickupDialog(o = {}) {
     </div>
     <div class="field"><label for="pu-note">Note for families</label><input id="pu-note" type="text" value="${esc(o.note ?? "")}"></div>
     <label class="check"><input type="checkbox" id="pu-active" ${o.active !== false ? "checked" : ""}> Show at checkout</label>
-    <p class="small muted" style="margin-top:12px">Leave date and time blank for options like “Send home with my student”.</p></div>
+    <p class="small muted" style="margin-top:12px">Times are optional. A note like “Before or after school” is shown with the day.</p></div>
     <div class="dlg-foot"><button class="btn btn-ghost" data-cancel>Cancel</button><button class="btn" type="submit">Save</button></div>`,
     { onSubmit: async (f) => {
       const g = (k) => f.querySelector(k).value.trim();
@@ -531,8 +568,8 @@ function viewSettings() {
     </form>
 
     <section class="panel settings-section">
-      <div class="row"><h2 style="margin:0">Pickup dates &amp; times</h2><span class="spacer"></span><button class="btn btn-sm" data-act="add-pickup">Add option</button></div>
-      <p class="muted small" style="margin-top:8px">Families choose one of the active options at checkout.</p>
+      <div class="row"><h2 style="margin:0">Pickup days</h2><span class="spacer"></span><button class="btn btn-sm" data-act="add-pickup">Add day</button></div>
+      <p class="muted small" style="margin-top:8px">Families can come on any active day. The dates appear in the instructions as <strong>${esc(pickupDaysText(D.pickupOptions))}</strong>.</p>
       ${D.pickupOptions.length ? D.pickupOptions.map((o, i) => `<div class="pickup-row">
         <div><strong>${esc(o.label)}</strong> ${o.active ? "" : `<span class="pill pill-hidden">Off</span>`}
           <div class="small muted">${esc(pickupText({ ...o, label: "" }).replace(/^ · /, "")) || "No date/time"}${o.note ? ` — ${esc(o.note)}` : ""}</div></div>
@@ -540,23 +577,32 @@ function viewSettings() {
           ${i > 0 ? `<button class="btn btn-ghost btn-sm" data-act="pickup-up" data-id="${o.id}" aria-label="Move up">↑</button>` : ""}
           <button class="btn btn-ghost btn-sm" data-act="edit-pickup" data-id="${o.id}">Edit</button>
           <button class="btn btn-danger btn-sm" data-act="del-pickup" data-id="${o.id}">Delete</button>
-        </div></div>`).join("") : `<p class="muted">No pickup options yet — add at least one before the sale opens.</p>`}
+        </div></div>`).join("") : `<p class="muted">No pickup days yet — add them before the sale opens.</p>`}
     </section>
+
+    <form class="panel settings-section" id="set-instr">
+      <h2>Reservation instructions</h2>
+      <p class="muted small">Shown to families in the cart and on their reservation page, and copied into your alert email. Use <code>{link}</code> for the FutureFund donation link and <code>{pickup_days}</code> for the pickup days.</p>
+      <div class="field"><label for="instr">Instructions</label><textarea id="instr" rows="4">${esc(s.instructions || DEFAULT_INSTRUCTIONS)}</textarea></div>
+      <div class="note" style="margin-bottom:16px"><strong>Families will see:</strong> <span id="instr-preview">${instructionsHtml(s.instructions, s.donate_url, D.pickupOptions)}</span></div>
+      <button class="btn" type="submit">Save instructions</button>
+    </form>
 
     <form class="panel settings-section" id="set-money">
       <h2>Goal, donations &amp; follow-up</h2>
       <div class="grid-2">
         <div class="field"><label for="goal">Fundraiser goal ($)</label><input id="goal" type="text" inputmode="decimal" value="${toDollars(s.goal_cents)}"></div>
         <div class="field"><label for="expenses">Total expenses ($)</label><input id="expenses" type="text" inputmode="decimal" value="${toDollars(s.expenses_cents)}"><div class="hint">Optional. Used for net profit on the dashboard.</div></div>
-        <div class="field"><label for="overdue">Flag unpaid invoices after (hours)</label><input id="overdue" type="number" min="1" value="${s.overdue_hours}"></div>
-        <div class="field"><label for="donate">FutureFund donation link</label><input id="donate" type="url" value="${esc(s.donate_url)}"><div class="hint">Where the Donate button goes.</div></div>
+        <div class="field"><label for="overdue">Flag unpaid reservations after (hours)</label><input id="overdue" type="number" min="1" value="${s.overdue_hours}"></div>
+        <div class="field"><label for="donate">FutureFund donation link</label><input id="donate" type="url" value="${esc(s.donate_url)}"><div class="hint">Used in the instructions ({link}) and by the Donate button.</div></div>
       </div>
       <button class="btn" type="submit">Save</button>
     </form>
 
     <form class="panel settings-section" id="set-notify">
-      <h2>New-order emails</h2>
-      <div class="field"><label for="emails">Send new-order alerts to</label><textarea id="emails" rows="2" placeholder="one email per line">${esc((s.notify_emails || []).join("\n"))}</textarea></div>
+      <h2>New-reservation emails</h2>
+      <p class="muted small">Each reservation emails a full record here, ready to forward to the family if they lose their copy. Must match the email on the Resend account.</p>
+      <div class="field"><label for="emails">Send new-reservation alerts to</label><textarea id="emails" rows="2" placeholder="one email per line">${esc((s.notify_emails || []).join("\n"))}</textarea></div>
       <button class="btn" type="submit">Save</button>
     </form>
 
@@ -601,6 +647,10 @@ function viewSettings() {
   }, "Sale settings saved");
   saveForm("set-money", () => ({ goal_cents: toCents(val("goal")), expenses_cents: toCents(val("expenses")),
     overdue_hours: Math.max(1, parseInt(val("overdue")) || 48), donate_url: val("donate") || "https://www.futurefund.com/" }));
+  saveForm("set-instr", () => ({ instructions: val("instr") || DEFAULT_INSTRUCTIONS }), "Instructions saved");
+  document.getElementById("instr").addEventListener("input", (e) => {
+    document.getElementById("instr-preview").innerHTML = instructionsHtml(e.target.value, val("donate"), D.pickupOptions);
+  });
   saveForm("set-notify", () => ({ notify_emails: val("emails").split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter(Boolean) }), "Notification emails saved");
   document.getElementById("set-family").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -624,11 +674,11 @@ function viewSettings() {
 // ───── Reports ─────
 function viewReports() {
   const reports = [
-    ["sales", "Sales", "Each paid order with its pieces, family and amount received."],
+    ["pickup", "Pickup list", "Every active reservation sorted by last name, with phone, pieces, suggested amount, paid and picked-up columns — print it for the pickup table."],
+    ["sales", "Sales", "Each paid reservation with its pieces and the amount donated."],
+    ["open", "Unpaid reservations", "Reservations not yet marked paid, with how long each has been waiting."],
     ["donations", "Donations", "Every donation recorded on the Donations page."],
-    ["pickup", "Pickup list", "Paid and open orders grouped by pickup date/time, then teacher/class — for packing and handing out."],
-    ["open", "Open orders", "New and invoice-sent orders, with how long each has been waiting."],
-    ["inventory", "Inventory", "Every piece with quantity, on hold, sold and available."],
+    ["inventory", "Inventory", "Every piece with quantity, reserved, sold and available."],
   ];
   app.innerHTML = shell("reports", `
     <div class="admin-top"><h1>Reports</h1></div>
@@ -636,29 +686,32 @@ function viewReports() {
 }
 function downloadReport(k) {
   const stamp = new Date().toISOString().slice(0, 10);
-  const puLabel = (o) => { const p = D.pickupOptions.find((x) => x.id === o.pickup_option_id); return p ? pickupText(p) : o.pickup_label; };
-  const puSort = (o) => { const p = D.pickupOptions.find((x) => x.id === o.pickup_option_id); return `${p?.pickup_date ?? "9999"} ${p?.start_time ?? ""} ${o.pickup_label}`; };
+  const lastName = (o) => (o.parent_name.trim().split(/\s+/).slice(-1)[0] || "").toLowerCase();
+  const pieces = (o) => activeItems(o).map((i) => i.title + (i.qty > 1 ? ` x${i.qty}` : "")).join("; ");
+  if (k === "pickup") {
+    const rows = [["Last name", "Name", "Reservation", "Phone", "Email", "Pieces", "Suggested donation", "Paid?", "Amount donated", "Picked up?"]];
+    D.orders.filter((o) => o.status !== "released")
+      .sort((a, b) => lastName(a).localeCompare(lastName(b)) || a.parent_name.localeCompare(b.parent_name))
+      .forEach((o) => rows.push([o.parent_name.trim().split(/\s+/).slice(-1)[0], o.parent_name, o.order_no, o.phone, o.email, pieces(o), toDollars(orderTotal(o)),
+        o.status === "paid" ? "Yes" : "Not yet", o.status === "paid" ? toDollars(o.amount_received_cents) : "", o.picked_up_at ? fmtDate(o.picked_up_at) : ""]));
+    downloadCsv(`pickup-list-${stamp}.csv`, rows);
+  }
   if (k === "sales") {
-    const rows = [["Order", "Paid on", "Parent", "Email", "Student", "Class", "Piece", "Artist", "Qty", "Suggested", "Order amount received"]];
+    const rows = [["Reservation", "Paid on", "Name", "Email", "Phone", "Piece", "Qty", "Suggested", "Reservation amount donated", "Picked up"]];
     for (const o of D.orders.filter((x) => x.status === "paid"))
-      activeItems(o).forEach((i, n) => rows.push([o.order_no, fmtDate(o.paid_at), o.parent_name, o.email, o.student_name, o.student_class, i.title, i.artist, i.qty, toDollars(i.qty * i.suggested_cents), n === 0 ? toDollars(o.amount_received_cents) : ""]));
+      activeItems(o).forEach((i, n) => rows.push([o.order_no, fmtDate(o.paid_at), o.parent_name, o.email, o.phone, i.title, i.qty, toDollars(i.qty * i.suggested_cents),
+        n === 0 ? toDollars(o.amount_received_cents) : "", n === 0 && o.picked_up_at ? fmtDate(o.picked_up_at) : ""]));
     downloadCsv(`sales-${stamp}.csv`, rows);
   }
   if (k === "donations") downloadCsv(`donations-${stamp}.csv`, [["Date", "Name", "Note", "Amount"], ...D.donations.map((d) => [d.donated_on, d.name, d.note, toDollars(d.amount_cents)])]);
-  if (k === "pickup") {
-    const rows = [["Pickup", "Teacher / class", "Student", "Parent", "Phone", "Order", "Status", "Pieces"]];
-    D.orders.filter((o) => o.status !== "released").sort((a, b) => puSort(a).localeCompare(puSort(b)) || a.student_class.localeCompare(b.student_class) || a.student_name.localeCompare(b.student_name))
-      .forEach((o) => rows.push([puLabel(o), o.student_class, o.student_name, o.parent_name, o.phone, o.order_no, STATUS_LABEL[o.status], activeItems(o).map((i) => i.title + (i.qty > 1 ? ` x${i.qty}` : "")).join("; ")]));
-    downloadCsv(`pickup-list-${stamp}.csv`, rows);
-  }
   if (k === "open") {
-    const rows = [["Order", "Status", "Placed", "Invoice sent", "Hours waiting", "Overdue", "Parent", "Email", "Phone", "Total"]];
-    D.orders.filter((o) => o.status === "new" || o.status === "invoice_sent").forEach((o) => rows.push([o.order_no, STATUS_LABEL[o.status], fmtDateTime(o.created_at), fmtDateTime(o.invoice_sent_at),
-      Math.round((Date.now() - new Date(o.invoice_sent_at || o.created_at).getTime()) / 3600e3), isOverdue(o) ? "Yes" : "", o.parent_name, o.email, o.phone, toDollars(orderTotal(o))]));
-    downloadCsv(`open-orders-${stamp}.csv`, rows);
+    const rows = [["Reservation", "Reserved", "Hours waiting", "Overdue", "Name", "Email", "Phone", "Pieces", "Suggested donation"]];
+    D.orders.filter((o) => o.status === "new" || o.status === "invoice_sent").forEach((o) => rows.push([o.order_no, fmtDateTime(o.created_at),
+      Math.round((Date.now() - new Date(o.created_at).getTime()) / 3600e3), isOverdue(o) ? "Yes" : "", o.parent_name, o.email, o.phone, pieces(o), toDollars(orderTotal(o))]));
+    downloadCsv(`unpaid-reservations-${stamp}.csv`, rows);
   }
-  if (k === "inventory") downloadCsv(`inventory-${stamp}.csv`, [["Title", "Artist", "Category", "Suggested", "Quantity", "On hold", "Sold", "Available", "Hidden"],
-    ...D.pieces.map((p) => [p.title, p.artist, p.category, toDollars(p.suggested_cents), p.quantity, p.held, p.sold, Math.max(0, p.available), p.hidden ? "Yes" : ""])]);
+  if (k === "inventory") downloadCsv(`inventory-${stamp}.csv`, [["Title", "Credit", "Category", "Suggested", "Quantity", "Reserved", "Sold", "Available", "Hidden"],
+    ...D.pieces.map((p) => [p.title, credit(p.artist), p.category, toDollars(p.suggested_cents), p.quantity, p.held, p.sold, Math.max(0, p.available), p.hidden ? "Yes" : ""])]);
   toast("Report downloaded", "ok");
 }
 
@@ -702,7 +755,7 @@ document.addEventListener("click", async (e) => {
       case "add-pickup": pickupDialog(); return;
       case "edit-pickup": pickupDialog(D.pickupOptions.find((o) => o.id === t.dataset.id)); return;
       case "del-pickup":
-        if (await confirmDialog("Delete pickup option?", "Families won't see it at checkout anymore. Orders that already chose it keep their pickup label.", "Delete", true)) { await api.deletePickup(t.dataset.id); await reload(); toast("Pickup option deleted"); viewSettings(); }
+        if (await confirmDialog("Delete pickup day?", "It will no longer appear in the instructions families see.", "Delete", true)) { await api.deletePickup(t.dataset.id); await reload(); toast("Pickup option deleted"); viewSettings(); }
         return;
       case "pickup-up": {
         const list = D.pickupOptions; const i = list.findIndex((o) => o.id === t.dataset.id);

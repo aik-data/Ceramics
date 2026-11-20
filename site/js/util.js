@@ -151,3 +151,29 @@ export const blobToDataUrl = (blob) =>
 
 export const orderTotal = (order) =>
   (order.order_items || []).filter((i) => !i.released).reduce((s, i) => s + i.qty * i.suggested_cents, 0);
+
+// ───── Reservation instructions ─────
+// Pickup days as "12/11, 12/14, or 12/15" from the active pickup options that have dates.
+export function pickupDaysText(options = []) {
+  const days = [...new Set(options.filter((o) => o.pickup_date && o.active !== false).map((o) => o.pickup_date))].sort()
+    .map((d) => { const [, m, day] = d.split("-").map(Number); return `${m}/${day}`; });
+  if (!days.length) return "the pickup days";
+  if (days.length === 1) return days[0];
+  if (days.length === 2) return `${days[0]} or ${days[1]}`;
+  return `${days.slice(0, -1).join(", ")}, or ${days[days.length - 1]}`;
+}
+export const DEFAULT_INSTRUCTIONS =
+  "Once you have reserved your item, go to this link {link} and donate the suggested amount. Save your receipt — you will need it to pick up your item before or after school on {pickup_days}.";
+// Plain text (for emails, copying).
+export function instructionsText(template, link, options) {
+  return (template || DEFAULT_INSTRUCTIONS).replaceAll("{link}", link || "").replaceAll("{pickup_days}", pickupDaysText(options));
+}
+// HTML with the link clickable.
+export function instructionsHtml(template, link, options) {
+  const parts = (template || DEFAULT_INSTRUCTIONS).split("{link}");
+  const fill = (t) => esc(t.replaceAll("{pickup_days}", pickupDaysText(options)));
+  const a = `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(link)}</a>`;
+  return parts.map(fill).join(a);
+}
+export const DEFAULT_CREDIT = "a Cal High Ceramics 1 student";
+export const credit = (artist) => `Handcrafted by ${artist || DEFAULT_CREDIT}`;
