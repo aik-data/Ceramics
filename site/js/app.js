@@ -3,7 +3,7 @@
 import { getApi } from "./api.js";
 import {
   esc, money, fmtDateTime, fmtDate, toast, friendlyError,
-  pickupDaysText, instructionsHtml, credit,
+  pickupDaysText, instructionsHtml, credit, DEFAULT_INSTRUCTIONS,
 } from "./util.js";
 
 const app = document.getElementById("app");
@@ -30,7 +30,13 @@ const cart = {
 const pieceById = (id) => gallery?.pieces.find((p) => p.id === id);
 const canCheckout = () => info.sale_state === "open";
 const pickupOptions = () => gallery?.pickup_options ?? [];
+// After reserving: the real FutureFund link. Before reserving: no link, so families
+// always reserve first and then donate.
 const instructions = () => instructionsHtml(info.instructions, info.donate_url, pickupOptions());
+const instructionsBeforeReserving = () =>
+  (info.instructions || DEFAULT_INSTRUCTIONS).split("{link}")
+    .map((t) => esc(t.replaceAll("{pickup_days}", pickupDaysText(pickupOptions()))))
+    .join("<strong>the FutureFund link (shown once you reserve)</strong>");
 const pickupPlace = () => [...new Set(pickupOptions().map((o) => o.location).filter(Boolean))].join(" / ");
 
 // Keep the cart honest against current availability.
@@ -62,7 +68,6 @@ function shell(inner) {
     <a class="brand brand-logo" href="#/">${logo("sm")}<span class="brand-text"><span class="school">${esc(info.school_name)}</span><span class="name">${esc(info.fundraiser_name)}</span></span></a>
     <nav class="nav" aria-label="Main">
       <a href="#/" class="hide-sm">Gallery</a>
-      <a href="${esc(info.donate_url)}" target="_blank" rel="noopener">Donate</a>
       <a href="#/cart" class="cart-link">Cart <span class="badge-count ${cart.count() ? "" : "hidden"}" id="cart-count">${cart.count()}</span></a>
     </nav>
   </div></header>
@@ -90,7 +95,6 @@ function viewComingSoon() {
     <div class="panel" style="text-align:center">
       <div class="eyebrow">Coming soon</div>
       <p style="font-family:var(--serif);font-size:1.6rem;margin:.3em 0">Reservations open ${esc(fmtDateTime(info.sale_opens_at))}</p>
-      <a class="btn btn-ghost" href="${esc(info.donate_url)}" target="_blank" rel="noopener">Make a donation</a>
     </div>
   </div>`;
 }
@@ -157,9 +161,7 @@ function viewGallery() {
     ${days.length ? `<div class="goal">
       <div class="eyebrow">Pickup at school</div>
       <ul class="pickup-days">${days.map((d) => `<li>${esc(fmtDate(d))}</li>`).join("")}</ul>
-      <div class="small muted">Before or after school${place ? ` · ${esc(place)}` : ""}. Bring your FutureFund receipt.</div>
-      <div class="row small" style="margin-top:12px"><span class="spacer"></span><a href="${esc(info.donate_url)}" target="_blank" rel="noopener">Make a donation →</a></div>
-    </div>` : ""}
+      <div class="small muted">Before or after school${place ? ` · ${esc(place)}` : ""}. Bring your FutureFund receipt.</div>    </div>` : ""}
   </div></section>
   <div class="wrap">
     <div class="filters" role="group" aria-label="Filter pieces">
@@ -211,7 +213,7 @@ function viewPiece(id) {
         <div class="price-lg">${money(p.suggested_cents)} <span class="small muted">suggested donation</span></div>
         ${p.description ? `<p style="margin-top:18px">${esc(p.description)}</p>` : ""}
         <div style="margin-top:24px">${action}</div>
-        <p class="small muted" style="margin-top:24px">${instructions()}</p>
+        <p class="small muted" style="margin-top:24px">${instructionsBeforeReserving()}</p>
       </div>
     </div></div>`);
 }
@@ -244,7 +246,7 @@ function viewCart(error = "") {
           <div>${money(i.qty * i.p.suggested_cents)}</div>
         </div>`).join("")}
         <div class="totals"><span>Suggested donation</span><strong>${money(total)}</strong></div>
-        <div class="note"><strong>How it works:</strong> ${instructions()}</div>
+        <div class="note"><strong>How it works:</strong> ${instructionsBeforeReserving()}</div>
       </div>
       <form class="panel" id="checkout" novalidate>
         <h2 style="font-size:1.5rem">Reserve your pieces</h2>

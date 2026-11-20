@@ -559,7 +559,7 @@ function viewSettings() {
       <h2>Donation link &amp; follow-up</h2>
       <div class="grid-2">
         <div class="field"><label for="overdue">Flag unpaid reservations after (hours)</label><input id="overdue" type="number" min="1" value="${s.overdue_hours}"></div>
-        <div class="field"><label for="donate">FutureFund donation link</label><input id="donate" type="url" value="${esc(s.donate_url)}"><div class="hint">Used in the instructions ({link}) and by the Donate button.</div></div>
+        <div class="field"><label for="donate">FutureFund donation link</label><input id="donate" type="url" value="${esc(s.donate_url)}"><div class="hint">Shown to families only after they reserve (the {link} in the instructions).</div></div>
       </div>
       <button class="btn" type="submit">Save</button>
     </form>
