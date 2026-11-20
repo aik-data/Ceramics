@@ -461,8 +461,26 @@ function viewListing(id) {
       </div>
       <div class="field"><label for="description">Description</label><textarea id="description" rows="4">${esc(p.description)}</textarea></div>
       <label class="check" style="margin-bottom:20px"><input type="checkbox" id="hidden" ${p.hidden ? "checked" : ""}> Hide from the gallery</label>
-      <div class="row"><button class="btn" type="submit">${isNew ? "Add piece" : "Save changes"}</button><a class="btn btn-ghost" href="#/listings">Cancel</a></div>
+      <div class="row"><button class="btn" type="submit">${isNew ? "Add piece" : "Save changes"}</button><a class="btn btn-ghost" href="#/listings">Cancel</a>
+        ${isNew ? "" : `<span class="spacer"></span><button class="btn btn-danger" type="button" id="del-piece">Delete piece</button>`}</div>
     </form>`);
+
+  document.getElementById("del-piece")?.addEventListener("click", async () => {
+    const reservations = D.orders.filter((o) => o.order_items.some((i) => i.piece_id === p.id));
+    if (reservations.length) {
+      const list = reservations.slice(0, 5).map((o) => esc(o.order_no)).join(", ") + (reservations.length > 5 ? "…" : "");
+      if (await confirmDialog("This piece can't be deleted",
+        `It's part of ${reservations.length === 1 ? "a reservation" : `${reservations.length} reservations`} (${list}), which need to keep their record of it. You can hide it from the gallery instead.`,
+        p.hidden ? "OK" : "Hide it from the gallery")) {
+        if (!p.hidden) { await api.savePiece({ ...p, hidden: true }); await reload(); toast("Piece hidden from the gallery", "ok"); viewListing(p.id); }
+      }
+      return;
+    }
+    if (await confirmDialog("Delete this piece?", `“${esc(p.title)}” and its photos will be permanently removed. This can't be undone.`, "Delete piece", true)) {
+      try { await api.deletePiece(p); await reload(); toast("Piece deleted", "ok"); location.hash = "#/listings"; }
+      catch (err) { toast(friendlyError(err), "error"); }
+    }
+  });
   renderPhotos();
 
   document.getElementById("photos").addEventListener("click", (e) => {

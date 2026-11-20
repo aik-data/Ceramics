@@ -176,6 +176,14 @@ export function createDemoBackend() {
       save(db);
       return row;
     },
+    async deletePiece(piece) {
+      const db = load();
+      if (db.orders.some((o) => o.order_items.some((i) => i.piece_id === piece.id))) {
+        throw new Error("This piece has reservations, so it can't be deleted. Hide it instead.");
+      }
+      db.pieces = db.pieces.filter((p) => p.id !== piece.id);
+      save(db);
+    },
     async uploadPhoto(file) { return blobToDataUrl(await resizeImage(file, 1000, 0.8)); },
     async savePickup(opt) {
       const db = load();

@@ -146,6 +146,17 @@ export function createLiveBackend({ supabaseUrl, supabaseAnonKey, area = "family
       if (!row.id) delete row.id;
       return unwrap(await sb.from("pieces").upsert(row).select().single());
     },
+    async deletePiece(piece) {
+      const { error } = await sb.from("pieces").delete().eq("id", piece.id);
+      if (error) {
+        if (error.code === "23503") throw new Error("This piece has reservations, so it can't be deleted. Hide it instead.");
+        throw error;
+      }
+      // Tidy up its uploaded photos (only files in our own photo bucket).
+      const marker = "/storage/v1/object/public/photos/";
+      const paths = (piece.photos || []).filter((u) => u.includes(marker)).map((u) => decodeURIComponent(u.split(marker)[1]));
+      if (paths.length) await sb.storage.from("photos").remove(paths).catch(() => {});
+    },
     async uploadPhoto(file) {
       const blob = await resizeImage(file);
       const path = `pieces/${crypto.randomUUID()}.jpg`;
