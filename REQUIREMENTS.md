@@ -5,7 +5,7 @@ Status: **Approved for build** · Last updated: 2026-11-20
 > **Update — Cal High policy (2026-11-20).** These changes replace the invoice flow described in the sections below.
 > - **Branding:** "California High School Ceramics", with the Cal High Ceramics logo, the Grizzlies banner, and orange/black colors.
 > - **Flow:** families **reserve** (the button says "Reserve"), then donate the suggested amount themselves through the FutureFund link and keep the receipt. Admins don't send invoices.
-> - **Order stages:** Reserved → Paid (seen in FutureFund) → Picked up. A receipt checked at pickup can mark a reservation paid and picked up in one step. An unpaid reservation is flagged 48 hours after it was made, and only an admin can release it.
+> - **Order stages:** Reserved → Picked up. Admins can't see FutureFund payments, so the only confirmation is the receipt shown at pickup ("Receipt checked — picked up"). An admin can release a reservation back to inventory at any time. There's no overdue flagging.
 > - **Checkout fields:** first name, last name, email, phone and notes. No student, class or pickup choice.
 > - **Pickup:** any of the pickup days (12/11, 12/14, 12/15), before or after school, in Room 3002. Pickup days are a setting.
 > - **Instructions:** an editable setting, using `{link}` and `{pickup_days}` placeholders. Shown in the cart and on the reservation page, and copied into the admin email.

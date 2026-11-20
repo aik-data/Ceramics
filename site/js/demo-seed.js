@@ -44,7 +44,7 @@ export function seedDemo() {
     { ...base, id: "o3", order_no: "CER-1003", created_at: iso(-3.5 * day), parent_name: "Chris Morgan", email: "cmorgan@example.com", phone: "555-0110",
       status: "new", seen_at: iso(-3.4 * day), order_items: [item("p9")] },
     { ...base, id: "o2", order_no: "CER-1002", created_at: iso(-1.2 * day), parent_name: "Dana Lopez", email: "dana.lopez@example.com", phone: "555-0199",
-      status: "paid", seen_at: iso(-1.1 * day), paid_at: iso(-0.9 * day), amount_received_cents: 4000, order_items: [item("p2")] },
+      status: "new", seen_at: iso(-1.1 * day), order_items: [item("p2")] },
     { ...base, id: "o1", order_no: "CER-1001", created_at: iso(-5 * day), parent_name: "Sam Rivera", email: "sam.rivera@example.com", phone: "555-0123",
       status: "paid", seen_at: iso(-4.9 * day), paid_at: iso(-4 * day), picked_up_at: iso(-1 * day), amount_received_cents: 6000, order_items: [item("p1"), item("p3")] },
   ];

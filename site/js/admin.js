@@ -23,22 +23,18 @@ async function reload() {
   }
   knownOrderIds = new Set(D.orders.map((o) => o.id));
 }
-// Unpaid reservations get flagged after the overdue window (counted from when they reserved).
-const isOverdue = (o) =>
-  (o.status === "new" || o.status === "invoice_sent") &&
-  Date.now() - new Date(o.created_at).getTime() > (D.settings.overdue_hours || 48) * 3600e3;
-const unread = () => D.orders.filter((o) => !o.seen_at && (o.status === "new" || o.status === "invoice_sent"));
-const pill = (o) => o.status === "paid" && o.picked_up_at
-  ? `<span class="pill pill-picked">Picked up</span>`
-  : `<span class="pill pill-${o.status === "invoice_sent" ? "new" : o.status}">${STATUS_LABEL[o.status]}</span>${isOverdue(o) ? ` <span class="pill pill-overdue">Overdue</span>` : ""}`;
+// Stages: Reserved → Picked up (receipt checked at pickup), or Released back to inventory.
+const isPicked = (o) => o.status === "paid" && !!o.picked_up_at;
+const isOpen = (o) => o.status !== "released" && !isPicked(o);
+const unread = () => D.orders.filter((o) => !o.seen_at && isOpen(o));
+const pill = (o) => isPicked(o) ? `<span class="pill pill-picked">Picked up</span>`
+  : o.status === "released" ? `<span class="pill pill-released">Released</span>`
+  : `<span class="pill pill-new">Reserved</span>`;
 const activeItems = (o) => o.order_items.filter((i) => !i.released);
 
 function stats() {
-  const open = D.orders.filter((o) => o.status === "new" || o.status === "invoice_sent");
   const units = D.pieces.filter((p) => !p.hidden).reduce((a, p) => ({ total: a.total + p.quantity, sold: a.sold + p.sold, held: a.held + p.held, avail: a.avail + Math.max(0, p.available) }), { total: 0, sold: 0, held: 0, avail: 0 });
-  const toPickUp = D.orders.filter((o) => o.status === "paid" && !o.picked_up_at).length;
-  const pickedUp = D.orders.filter((o) => o.status === "paid" && o.picked_up_at).length;
-  return { openCount: open.length, overdueCount: D.orders.filter(isOverdue).length, units, toPickUp, pickedUp };
+  return { openCount: D.orders.filter(isOpen).length, pickedUp: D.orders.filter(isPicked).length, units };
 }
 
 // ───── Dialog helper ─────
@@ -144,7 +140,6 @@ function viewDashboard() {
   const st = stats();
   const s = D.settings;
   const news = unread();
-  const overdue = D.orders.filter(isOverdue);
 
   app.innerHTML = shell("dashboard", `
     <div class="admin-top"><h1>Dashboard</h1><span class="spacer"></span><button class="btn btn-ghost btn-sm" data-act="refresh">Refresh</button></div>
@@ -159,18 +154,10 @@ function viewDashboard() {
       </tbody></table></div></section>` : ""}
 
     <div class="tiles">
-      <div class="tile"><div class="k">Reserved</div><div class="v">${st.openCount}</div><div class="s">not yet marked paid${st.overdueCount ? ` · ${st.overdueCount} overdue` : ""}</div></div>
-      <div class="tile"><div class="k">To pick up</div><div class="v">${st.toPickUp}</div><div class="s">paid reservation${st.toPickUp === 1 ? "" : "s"} waiting for pickup</div></div>
+      <div class="tile"><div class="k">Reserved</div><div class="v">${st.openCount}</div><div class="s">waiting for pickup</div></div>
       <div class="tile"><div class="k">Picked up</div><div class="v">${st.pickedUp}</div><div class="s">reservation${st.pickedUp === 1 ? "" : "s"} complete</div></div>
       <div class="tile"><div class="k">Pieces</div><div class="v">${st.units.sold} sold</div><div class="s">${st.units.held} reserved · ${st.units.avail} available of ${st.units.total}</div></div>
     </div>
-
-    ${overdue.length ? `<div class="panel" style="margin-bottom:22px">
-      <h3 class="section-title">Overdue — reserved more than ${s.overdue_hours} hours ago, not marked paid</h3>
-      <div class="table-wrap"><table class="list"><tbody>${overdue.map((o) => `
-        <tr class="clickable" data-href="#/order/${o.id}"><td><strong>${esc(o.order_no)}</strong></td><td>${esc(o.parent_name)}</td>
-        <td class="num">${money(orderTotal(o))}</td><td class="small muted">Reserved ${ago(o.created_at)}</td></tr>`).join("")}
-      </tbody></table></div></div>` : ""}
 
     <div class="panel">
       <h3 class="section-title">Recent activity</h3>
@@ -183,17 +170,15 @@ function viewDashboard() {
 }
 
 // ───── Orders (reservations) ─────
-const isOpen = (o) => o.status === "new" || o.status === "invoice_sent";
 const tabMatch = (o, tab) =>
   tab === "all" ? true :
   tab === "reserved" ? isOpen(o) :
-  tab === "paid" ? o.status === "paid" && !o.picked_up_at :
-  tab === "picked_up" ? o.status === "paid" && !!o.picked_up_at :
+  tab === "picked_up" ? isPicked(o) :
   o.status === tab;
 
 function viewOrders(tab = "reserved") {
-  if (tab === "new" || tab === "invoice_sent") tab = "reserved";
-  const tabs = [["reserved", "Reserved"], ["paid", "Paid — to pick up"], ["picked_up", "Picked up"], ["released", "Released"], ["all", "All"]];
+  if (!["reserved", "picked_up", "released", "all"].includes(tab)) tab = "reserved";
+  const tabs = [["reserved", "Reserved"], ["picked_up", "Picked up"], ["released", "Released"], ["all", "All"]];
   const list = D.orders.filter((o) => tabMatch(o, tab));
   app.innerHTML = shell("orders", `
     <div class="admin-top"><h1>Reservations</h1><span class="spacer"></span><button class="btn btn-ghost btn-sm" data-act="refresh">Refresh</button></div>
@@ -248,27 +233,18 @@ async function viewOrder(id) {
 
   let actions = "";
   if (open) actions = `
-    <button class="btn btn-accent btn-block" data-act="mark-paid">Mark paid…</button>
-    <p class="small muted" style="margin:0">Use when you see their donation in FutureFund.</p>
-    <button class="btn btn-block" data-act="paid-picked-up">Receipt checked — paid &amp; picked up…</button>
-    <p class="small muted" style="margin:0">Use at the pickup table when they show their receipt.</p>
+    <button class="btn btn-accent btn-block" data-act="picked-up">Receipt checked — picked up…</button>
+    <p class="small muted" style="margin:0">Use at the pickup table once they show their FutureFund receipt.</p>
     <button class="btn btn-ghost btn-block" data-act="copy-details">Copy reservation details</button>
-    <a class="btn btn-ghost btn-block" href="${esc(mailto(o, `Your ceramics reservation ${o.order_no}`, `Hi ${first},\n\nThank you for reserving with ${D.settings.fundraiser_name}! Here are your reservation details.\n\n${reservationText(o)}\n\nThank you for supporting our student artists!`))}">Email the family their details</a>`;
-  if (o.status === "paid" && !o.picked_up_at) actions = `
-    <p class="note note-ok" style="margin:0">Marked paid ${fmtDateTime(o.paid_at)}</p>
-    <button class="btn btn-accent btn-block" data-act="picked-up">Mark picked up</button>
-    <button class="btn btn-ghost btn-block" data-act="copy-details">Copy reservation details</button>
-    <button class="btn btn-ghost btn-block btn-sm" data-act="unpaid">Undo — mark as not paid</button>`;
-  if (o.status === "paid" && o.picked_up_at) actions = `
-    <p class="note note-ok" style="margin:0">Paid · Picked up ${fmtDateTime(o.picked_up_at)}</p>
+    <a class="btn btn-ghost btn-block" href="${esc(mailto(o, `Your ceramics reservation ${o.order_no}`, `Hi ${first},\n\nThank you for reserving with ${D.settings.fundraiser_name}! Here are your reservation details.\n\n${reservationText(o)}\n\nThank you for supporting our student artists!`))}">Email the family their details</a>
+    <button class="btn btn-danger btn-block" data-act="release">Release back to inventory…</button>`;
+  if (isPicked(o)) actions = `
+    <p class="note note-ok" style="margin:0">Receipt checked · Picked up ${fmtDateTime(o.picked_up_at)}</p>
     <button class="btn btn-ghost btn-block btn-sm" data-act="unpicked">Undo pickup</button>`;
-  if (o.status === "released") actions = `<p class="note" style="margin:0">Released ${fmtDateTime(o.released_at)}. These pieces are back on sale.</p>`;
-  if (open) actions += `
-    <a class="btn btn-ghost btn-block" href="${esc(mailto(o, `Reminder: ceramics reservation ${o.order_no}`, `Hi ${first},\n\nThis is a friendly reminder that your ceramics reservation ${o.order_no} is waiting for your donation of ${money(orderTotal(o))}.\n\n${instructionsText(D.settings.instructions, D.settings.donate_url, D.pickupOptions)}\n\nThank you for supporting our student artists!`))}">Email a reminder</a>
-    <button class="btn btn-danger btn-block" data-act="release">Release reservation…</button>`;
+  if (o.status === "released") actions = `<p class="note" style="margin:0">Released ${fmtDateTime(o.released_at)}. These pieces are back in inventory.</p>`;
 
   app.innerHTML = shell("orders", `
-    <a class="back" href="#/orders/${open ? "reserved" : o.status === "paid" ? (o.picked_up_at ? "picked_up" : "paid") : o.status}" style="margin-top:0">← Reservations</a>
+    <a class="back" href="#/orders/${open ? "reserved" : isPicked(o) ? "picked_up" : "released"}" style="margin-top:0">← Reservations</a>
     <div class="admin-top" style="margin-top:10px"><h1>${esc(o.order_no)}</h1>${pill(o)}<span class="spacer"></span><span class="muted small">Reserved ${fmtDateTime(o.created_at)}</span></div>
     <div class="order-grid">
       <div class="stack">
@@ -328,28 +304,21 @@ async function orderAct(act, el) {
           <div class="dlg-foot"><button class="btn" data-cancel>Done</button></div>`);
       }
       break;
-    case "mark-paid":
-      if (await confirmDialog(`Mark ${o.order_no} paid?`, "Use this once you've confirmed their donation in FutureFund. The pieces will show as sold.", "Mark paid")) await run("paid", {}, "Marked paid — pieces are now sold");
+    case "picked-up":
+      if (await confirmDialog(`${o.order_no}: receipt checked?`, `Confirm you've seen their FutureFund receipt and handed over the pieces. The pieces will show as sold.`, "Picked up")) await run("paid_picked_up", {}, "Marked picked up");
       break;
-    case "paid-picked-up":
-      if (await confirmDialog(`${o.order_no}: receipt checked?`, "Marks the reservation paid and picked up in one step.", "Paid & picked up")) await run("paid_picked_up", {}, "Marked paid and picked up");
-      break;
-    case "picked-up": await run("picked_up", {}, "Marked picked up"); break;
     case "unpicked":
-      if (await confirmDialog("Undo pickup?", "The reservation goes back to “Paid — to pick up”.", "Undo pickup")) await run("unpicked", {}, "Pickup undone");
-      break;
-    case "unpaid":
-      if (await confirmDialog("Undo payment?", "The reservation goes back to “Reserved”. Its pieces stay on hold.", "Undo payment")) await run("unpaid", {}, "Payment undone");
+      if (await confirmDialog("Undo pickup?", "The reservation goes back to “Reserved”. Its pieces stay set aside.", "Undo pickup")) await run("unpicked", {}, "Pickup undone");
       break;
     case "release":
       openDialog(`<div class="dlg-body"><h3>Release ${esc(o.order_no)}?</h3>
         <p class="muted">All pieces in this reservation go back on sale and it is closed. This can't be undone.</p>
         <label class="check"><input type="checkbox" id="mail" checked> Open an email to ${esc(o.parent_name)} afterward</label></div>
-        <div class="dlg-foot"><button class="btn btn-ghost" data-cancel>Cancel</button><button class="btn btn-danger" type="submit">Release reservation</button></div>`,
+        <div class="dlg-foot"><button class="btn btn-ghost" data-cancel>Cancel</button><button class="btn btn-danger" type="submit">Release to inventory</button></div>`,
         { onSubmit: async (f) => {
           const mail = f.querySelector("#mail").checked;
-          await run("release", {}, "Reservation released — pieces are back on sale");
-          if (mail) location.href = mailto(o, `Your ceramics reservation ${o.order_no}`, `Hi ${o.parent_name.split(" ")[0]},\n\nWe've released the pieces from your ceramics reservation ${o.order_no}, since we didn't see a donation for it. If this is a mistake, just reply and we'll help.\n\nThank you!`);
+          await run("release", {}, "Released — pieces are back in inventory");
+          if (mail) location.href = mailto(o, `Your ceramics reservation ${o.order_no}`, `Hi ${o.parent_name.split(" ")[0]},\n\nWe've released the pieces from your ceramics reservation ${o.order_no} back into the sale. If this is a mistake, just reply and we'll help.\n\nThank you!`);
         } });
       break;
     case "release-item": {
@@ -556,9 +525,8 @@ function viewSettings() {
     </form>
 
     <form class="panel settings-section" id="set-money">
-      <h2>Donation link &amp; follow-up</h2>
+      <h2>Donation link</h2>
       <div class="grid-2">
-        <div class="field"><label for="overdue">Flag unpaid reservations after (hours)</label><input id="overdue" type="number" min="1" value="${s.overdue_hours}"></div>
         <div class="field"><label for="donate">FutureFund donation link</label><input id="donate" type="url" value="${esc(s.donate_url)}"><div class="hint">Shown to families only after they reserve (the {link} in the instructions).</div></div>
       </div>
       <button class="btn" type="submit">Save</button>
@@ -611,7 +579,7 @@ function viewSettings() {
       fundraiser_name: val("fname") || "Student Ceramics Sale", school_name: val("sname"), intro: val("intro") };
   }, "Sale settings saved");
   saveForm("set-money", () => ({
-    overdue_hours: Math.max(1, parseInt(val("overdue")) || 48), donate_url: val("donate") || "https://www.futurefund.com/" }));
+    donate_url: val("donate") || "https://www.futurefund.com/" }));
   saveForm("set-instr", () => ({ instructions: val("instr") || DEFAULT_INSTRUCTIONS }), "Instructions saved");
   document.getElementById("instr").addEventListener("input", (e) => {
     document.getElementById("instr-preview").innerHTML = instructionsHtml(e.target.value, val("donate"), D.pickupOptions);
@@ -639,9 +607,9 @@ function viewSettings() {
 // ───── Reports ─────
 function viewReports() {
   const reports = [
-    ["pickup", "Pickup list", "Every active reservation sorted by last name, with phone, pieces, paid and picked-up columns — print it for the pickup table."],
-    ["sales", "Paid reservations", "Each reservation marked paid, with its pieces and pickup status."],
-    ["open", "Unpaid reservations", "Reservations not yet marked paid, with how long each has been waiting."],
+    ["pickup", "Pickup list", "Every active reservation sorted by last name, with phone, pieces, suggested donation, and blank Receipt and Picked up columns — print it for the pickup table."],
+    ["sales", "Picked up", "Each reservation picked up (receipt checked), with its pieces."],
+    ["open", "Not yet picked up", "Reservations still waiting for pickup, with when they were reserved."],
     ["inventory", "Inventory", "Every piece with quantity, reserved, sold and available."],
   ];
   app.innerHTML = shell("reports", `
@@ -653,25 +621,23 @@ function downloadReport(k) {
   const lastName = (o) => (o.parent_name.trim().split(/\s+/).slice(-1)[0] || "").toLowerCase();
   const pieces = (o) => activeItems(o).map((i) => i.title + (i.qty > 1 ? ` x${i.qty}` : "")).join("; ");
   if (k === "pickup") {
-    const rows = [["Last name", "Name", "Reservation", "Phone", "Email", "Pieces", "Suggested donation", "Paid?", "Picked up?"]];
+    const rows = [["Last name", "Name", "Reservation", "Phone", "Email", "Pieces", "Suggested donation", "Receipt checked", "Picked up"]];
     D.orders.filter((o) => o.status !== "released")
       .sort((a, b) => lastName(a).localeCompare(lastName(b)) || a.parent_name.localeCompare(b.parent_name))
       .forEach((o) => rows.push([o.parent_name.trim().split(/\s+/).slice(-1)[0], o.parent_name, o.order_no, o.phone, o.email, pieces(o), toDollars(orderTotal(o)),
-        o.status === "paid" ? "Yes" : "Not yet", o.picked_up_at ? fmtDate(o.picked_up_at) : ""]));
+        isPicked(o) ? "Yes" : "", isPicked(o) ? fmtDate(o.picked_up_at) : ""]));
     downloadCsv(`pickup-list-${stamp}.csv`, rows);
   }
   if (k === "sales") {
-    const rows = [["Reservation", "Marked paid", "Name", "Email", "Phone", "Piece", "Qty", "Suggested donation", "Picked up"]];
-    for (const o of D.orders.filter((x) => x.status === "paid"))
-      activeItems(o).forEach((i, n) => rows.push([o.order_no, fmtDate(o.paid_at), o.parent_name, o.email, o.phone, i.title, i.qty, toDollars(i.qty * i.suggested_cents),
-        n === 0 && o.picked_up_at ? fmtDate(o.picked_up_at) : ""]));
-    downloadCsv(`paid-reservations-${stamp}.csv`, rows);
+    const rows = [["Reservation", "Picked up", "Name", "Email", "Phone", "Piece", "Qty", "Suggested donation"]];
+    for (const o of D.orders.filter(isPicked))
+      activeItems(o).forEach((i) => rows.push([o.order_no, fmtDate(o.picked_up_at), o.parent_name, o.email, o.phone, i.title, i.qty, toDollars(i.qty * i.suggested_cents)]));
+    downloadCsv(`picked-up-${stamp}.csv`, rows);
   }
   if (k === "open") {
-    const rows = [["Reservation", "Reserved", "Hours waiting", "Overdue", "Name", "Email", "Phone", "Pieces", "Suggested donation"]];
-    D.orders.filter((o) => o.status === "new" || o.status === "invoice_sent").forEach((o) => rows.push([o.order_no, fmtDateTime(o.created_at),
-      Math.round((Date.now() - new Date(o.created_at).getTime()) / 3600e3), isOverdue(o) ? "Yes" : "", o.parent_name, o.email, o.phone, pieces(o), toDollars(orderTotal(o))]));
-    downloadCsv(`unpaid-reservations-${stamp}.csv`, rows);
+    const rows = [["Reservation", "Reserved", "Name", "Email", "Phone", "Pieces", "Suggested donation"]];
+    D.orders.filter(isOpen).forEach((o) => rows.push([o.order_no, fmtDateTime(o.created_at), o.parent_name, o.email, o.phone, pieces(o), toDollars(orderTotal(o))]));
+    downloadCsv(`not-yet-picked-up-${stamp}.csv`, rows);
   }
   if (k === "inventory") downloadCsv(`inventory-${stamp}.csv`, [["Title", "Credit", "Category", "Suggested", "Quantity", "Reserved", "Sold", "Available", "Hidden"],
     ...D.pieces.map((p) => [p.title, credit(p.artist), p.category, toDollars(p.suggested_cents), p.quantity, p.held, p.sold, Math.max(0, p.available), p.hidden ? "Yes" : ""])]);

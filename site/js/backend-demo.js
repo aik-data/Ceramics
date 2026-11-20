@@ -152,7 +152,7 @@ export function createDemoBackend() {
         case "unpaid": Object.assign(o, { status: "new", paid_at: null, amount_received_cents: null, picked_up_at: null }); log("Payment undone"); break;
         case "paid_picked_up": Object.assign(o, { status: "paid", paid_at: now, picked_up_at: now, seen_at: o.seen_at || now }); log("Receipt checked — paid and picked up"); break;
         case "picked_up": Object.assign(o, { picked_up_at: now }); log("Picked up"); break;
-        case "unpicked": Object.assign(o, { picked_up_at: null }); log("Pickup undone"); break;
+        case "unpicked": Object.assign(o, { status: "new", paid_at: null, picked_up_at: null }); log("Pickup undone"); break;
         case "release": o.order_items.forEach((i) => (i.released = true)); Object.assign(o, { status: "released", released_at: now, seen_at: o.seen_at || now }); log("Order released", "All pieces back on sale"); break;
         case "release_item": {
           const it = o.order_items.find((i) => i.id === data.item.id); it.released = true;

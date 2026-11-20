@@ -120,7 +120,7 @@ export function createLiveBackend({ supabaseUrl, supabaseAnonKey, area = "family
           await upd({ picked_up_at: now });
           return log(order.id, "Picked up");
         case "unpicked":
-          await upd({ picked_up_at: null });
+          await upd({ status: "new", paid_at: null, picked_up_at: null });
           return log(order.id, "Pickup undone");
         case "release":
           await sb.from("order_items").update({ released: true }).eq("order_id", order.id).then(unwrap);
