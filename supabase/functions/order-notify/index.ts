@@ -7,9 +7,8 @@
 //
 // Secrets (Supabase → Edge Functions → Secrets):
 //   RESEND_API_KEY  – from resend.com
-//   FROM_EMAIL      – optional, e.g. "Cal High Ceramics <sale@calhighceramics.org>" once the domain
-//                     is verified in Resend. Defaults to Resend's shared onboarding@resend.dev,
-//                     which can only deliver to the Resend account owner's email.
+//   FROM_EMAIL      – optional override. Defaults to "Cal High Ceramics <sale@calhighceramics.org>"
+//                     (calhighceramics.org is verified in Resend).
 //   SITE_URL        – optional, defaults to https://calhighceramics.org
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 
@@ -45,7 +44,7 @@ function pickupDaysText(options: any[]) {
 
 async function sendEmail(to: string[], subject: string, html: string, text: string, replyTo?: string) {
   const key = Deno.env.get("RESEND_API_KEY");
-  const from = Deno.env.get("FROM_EMAIL") ?? "Cal High Ceramics <onboarding@resend.dev>";
+  const from = Deno.env.get("FROM_EMAIL") ?? "Cal High Ceramics <sale@calhighceramics.org>";
   if (!key || to.length === 0) return { skipped: true };
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
