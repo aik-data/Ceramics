@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     if (body.action === "invite") {
       const email = String(body.email ?? "").trim().toLowerCase();
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "Invalid email" }, 400);
-      const siteUrl = (Deno.env.get("SITE_URL") ?? "https://aik-data.github.io/Ceramics").replace(/\/$/, "");
+      const siteUrl = (Deno.env.get("SITE_URL") ?? "https://calhighceramics.org").replace(/\/$/, "");
 
       let userId: string | undefined;
       const invited = await service.auth.admin.inviteUserByEmail(email, {

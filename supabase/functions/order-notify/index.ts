@@ -7,7 +7,7 @@
 //   FROM_EMAIL      – optional. Defaults to Resend's shared "onboarding@resend.dev",
 //                     which needs no domain but can only deliver to the email
 //                     address that owns the Resend account.
-//   SITE_URL        – optional, defaults to the GitHub Pages address
+//   SITE_URL        – optional, defaults to https://calhighceramics.org
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
       admin.from("settings").select("*").eq("id", 1).single(),
       admin.from("pickup_options").select("*").eq("active", true),
     ]);
-    const siteUrl = (Deno.env.get("SITE_URL") ?? "https://aik-data.github.io/Ceramics").replace(/\/$/, "");
+    const siteUrl = (Deno.env.get("SITE_URL") ?? "https://calhighceramics.org").replace(/\/$/, "");
     const items = order.order_items.filter((i: any) => !i.released);
     const total = items.reduce((s: number, i: any) => s + i.qty * i.suggested_cents, 0);
     const placed = new Date(order.created_at).toLocaleString("en-US", {

@@ -33,7 +33,7 @@ cd site && python3 -m http.server 8000
 
 1. Go to **Settings → Pages**. Under **Build and deployment → Source**, choose **GitHub Actions**.
 2. Merge this work into `main`. The workflow in `.github/workflows/pages.yml` deploys `site/` automatically on every push to `main` that changes the site.
-3. The site will be at `https://aik-data.github.io/Ceramics/` (admin portal at `/admin.html`).
+3. The site is at **https://calhighceramics.org** (admin portal at `/admin.html`). Custom domain set in Settings → Pages; DNS at Ionos (four A records to GitHub Pages + `www` CNAME to `aik-data.github.io`).
 
 ## Connect Supabase (reference — already done for this project)
 
@@ -58,7 +58,7 @@ cd site && python3 -m http.server 8000
    - Create a free account at resend.com and verify a sending domain.
    - Then run:
      ```bash
-     supabase secrets set RESEND_API_KEY=... FROM_EMAIL="Ceramics Sale <sale@yourdomain.org>" SITE_URL=https://aik-data.github.io/Ceramics
+     supabase secrets set RESEND_API_KEY=... FROM_EMAIL="Ceramics Sale <sale@yourdomain.org>" SITE_URL=https://calhighceramics.org
      supabase functions deploy order-notify
      supabase functions deploy admin-users
      ```
