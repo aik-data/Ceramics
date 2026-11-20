@@ -288,12 +288,12 @@ dialog .dlg-foot { display: flex; gap: 10px; justify-content: flex-end; padding:
 .school-band img { height: 64px; width: auto; max-width: 100%; object-fit: contain; }
 @media (max-width: 560px) { .school-band img { height: 40px; } }
 .logo { border-radius: 50%; background: #fff; object-fit: cover; }
-.logo-sm { width: 52px; height: 52px; }
-.logo-lg { width: 150px; height: 150px; margin: 0 auto 18px; box-shadow: var(--shadow); }
+.logo-sm { width: 72px; height: 72px; }
+.logo-lg { width: 200px; height: 200px; margin: 0 auto 18px; box-shadow: var(--shadow); }
 .brand-logo { flex-direction: row; align-items: center; gap: 12px; }
 .brand-text { display: flex; flex-direction: column; line-height: 1.1; }
 .site-header { border-bottom: 3px solid var(--school-orange); }
-@media (max-width: 560px) { .logo-sm { width: 40px; height: 40px; } }
+@media (max-width: 560px) { .logo-sm { width: 52px; height: 52px; } }
 
 .how { margin: 18px 0 14px; padding-left: 22px; color: var(--ink-2); }
 .how li { margin: 4px 0; }

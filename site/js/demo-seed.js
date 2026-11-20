@@ -25,9 +25,9 @@ export function seedDemo() {
   }));
 
   const pickupOptions = [
-    { id: "pu1", label: "Pickup day", pickup_date: "2026-12-11", start_time: null, end_time: null, location: "Room 3002", note: "Before or after school", active: true, sort: 0 },
-    { id: "pu2", label: "Pickup day", pickup_date: "2026-12-14", start_time: null, end_time: null, location: "Room 3002", note: "Before or after school", active: true, sort: 1 },
-    { id: "pu3", label: "Pickup day", pickup_date: "2026-12-15", start_time: null, end_time: null, location: "Room 3002", note: "Before or after school", active: true, sort: 2 },
+    { id: "pu1", label: "Pickup day", pickup_date: "2026-12-11", start_time: null, end_time: null, location: "Ceramics Yard, FA 102", note: "Before or after school", active: true, sort: 0 },
+    { id: "pu2", label: "Pickup day", pickup_date: "2026-12-14", start_time: null, end_time: null, location: "Ceramics Yard, FA 102", note: "Before or after school", active: true, sort: 1 },
+    { id: "pu3", label: "Pickup day", pickup_date: "2026-12-15", start_time: null, end_time: null, location: "Ceramics Yard, FA 102", note: "Before or after school", active: true, sort: 2 },
   ];
 
   const item = (p, qty = 1) => {

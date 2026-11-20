@@ -161,7 +161,7 @@ function viewGallery() {
     ${days.length ? `<div class="goal">
       <div class="eyebrow">Pickup at school</div>
       <ul class="pickup-days">${days.map((d) => `<li>${esc(fmtDate(d))}</li>`).join("")}</ul>
-      <div class="small muted">Before or after school${place ? ` · ${esc(place)}` : ""}. Bring your FutureFund receipt.</div>    </div>` : ""}
+      <div class="small muted">Before or after school${place ? ` at the ${esc(place)}` : ""}. Bring your FutureFund receipt.</div>    </div>` : ""}
   </div></section>
   <div class="wrap">
     <div class="filters" role="group" aria-label="Filter pieces">
@@ -353,7 +353,7 @@ function viewThanks(orderNo) {
       <ol style="padding-left:20px;margin:0">
         <li>Donate <strong>${money(s.total)}</strong> on FutureFund. If there's a note field, add your reservation number <strong>${esc(s.order_no)}</strong>.</li>
         <li>Save your FutureFund receipt.</li>
-        <li>Bring the receipt to pick up your pieces before or after school on <strong>${esc(pickupDaysText(pickupOptions()))}</strong>${place ? ` in <strong>${esc(place)}</strong>` : ""}.</li>
+        <li>Bring the receipt to pick up your pieces before or after school on <strong>${esc(pickupDaysText(pickupOptions()))}</strong>${place ? ` at the <strong>${esc(place)}</strong>` : ""}.</li>
       </ol>
       <div class="row no-print" style="margin-top:18px">
         <a class="btn btn-accent" href="${esc(info.donate_url)}" target="_blank" rel="noopener">Donate ${money(s.total)} on FutureFund →</a>
