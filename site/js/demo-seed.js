@@ -50,8 +50,12 @@ export function seedDemo() {
       status: "paid", seen_at: iso(-4.9 * day), paid_at: iso(-4 * day), picked_up_at: iso(-1 * day), amount_received_cents: 6000, order_items: [item("p1"), item("p3")] },
   ];
 
+  orders.forEach((o) => (o.cancel_token = `demo-cancel-${o.id}`));
+
   return {
     settings: {
+      email_families: false,
+      reply_to: "",
       fundraiser_name: "California High School Ceramics",
       school_name: "Student Ceramics Sale",
       intro: "Every piece in this gallery was handcrafted by a Cal High Ceramics 1 student. Reserve your favorites here, donate the suggested amount on FutureFund, and pick them up at school.",

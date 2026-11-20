@@ -4,7 +4,7 @@
 import { resizeImage, blobToDataUrl, saleState } from "./util.js";
 import { seedDemo } from "./demo-seed.js";
 
-const KEY = "ceramics-demo-v3";
+const KEY = "ceramics-demo-v4";
 const SESSION = "ceramics-demo-session";
 export const DEMO_FAMILY_PASSWORD = "clay";
 export const DEMO_ADMIN_PASSWORD = "demo";
@@ -62,6 +62,7 @@ export function createDemoBackend() {
         fundraiser_name: s.fundraiser_name, school_name: s.school_name, intro: s.intro,
         sale_opens_at: s.sale_opens_at, sale_closes_at: s.sale_closes_at, sale_state: saleState(s),
         donate_url: s.donate_url, instructions: s.instructions, terms: s.terms || "",
+        email_families: !!s.email_families, contact_email: s.reply_to || "",
       };
     },
     async familySession() { return isMember(); },
@@ -101,7 +102,7 @@ export function createDemoBackend() {
         items.push({ id: uid(), piece_id: p.id, qty: it.qty, suggested_cents: p.suggested_cents, title: p.title, artist: p.artist, released: false });
       }
       const order = {
-        id: uid(), order_no: "CER-" + db.nextOrderNo++, created_at: new Date().toISOString(),
+        id: uid(), order_no: "CER-" + db.nextOrderNo++, created_at: new Date().toISOString(), cancel_token: uid(),
         parent_name: o.parent_name.trim(), email: o.email.trim().toLowerCase(), phone: (o.phone || "").trim(),
         student_name: "", student_class: "", pickup_option_id: null, pickup_label: "",
         notes: (o.notes || "").trim(), picked_up_at: null, terms_agreed_at: new Date().toISOString(),
@@ -110,7 +111,33 @@ export function createDemoBackend() {
       };
       db.orders.unshift(order);
       save(db);
-      return { order_id: order.id, order_no: order.order_no };
+      return { order_id: order.id, order_no: order.order_no, cancel_token: order.cancel_token };
+    },
+    async getReservationByToken(token) {
+      const o = load().orders.find((x) => x.cancel_token === token);
+      if (!o) return null;
+      const items = o.order_items.filter((i) => !i.released);
+      return {
+        order_no: o.order_no, first_name: o.parent_name.split(" ")[0], created_at: o.created_at,
+        state: o.status === "released" ? "cancelled" : o.status === "paid" && o.picked_up_at ? "picked_up" : "reserved",
+        cancelled_by_family: !!o.cancelled_by_family_at,
+        items: items.map((i) => ({ title: i.title, qty: i.qty, suggested_cents: i.suggested_cents })),
+        total_cents: items.reduce((s, i) => s + i.qty * i.suggested_cents, 0),
+      };
+    },
+    async cancelReservation(token) {
+      await wait(200);
+      const db = load();
+      const o = db.orders.find((x) => x.cancel_token === token);
+      if (!o) throw new Error("NOT_FOUND");
+      if (o.status === "released") throw new Error("ALREADY_CANCELLED");
+      if (o.status === "paid" && o.picked_up_at) throw new Error("ALREADY_PICKED_UP");
+      o.order_items.forEach((i) => (i.released = true));
+      const now = new Date().toISOString();
+      Object.assign(o, { status: "released", released_at: now, cancelled_by_family_at: now });
+      db.activity.unshift({ id: uid(), at: now, admin_email: null, order_id: o.id, action: "Cancelled by family", detail: "Pieces returned to the sale" });
+      save(db);
+      return { order_no: o.order_no };
     },
 
     // ───── Admin ─────

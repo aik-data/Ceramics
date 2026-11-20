@@ -29,7 +29,7 @@ const isPicked = (o) => o.status === "paid" && !!o.picked_up_at;
 const isOpen = (o) => o.status !== "released" && !isPicked(o);
 const unread = () => D.orders.filter((o) => !o.seen_at && isOpen(o));
 const pill = (o) => isPicked(o) ? `<span class="pill pill-picked">Picked up</span>`
-  : o.status === "released" ? `<span class="pill pill-released">Released</span>`
+  : o.status === "released" ? `<span class="pill pill-released">${o.cancelled_by_family_at ? "Cancelled by family" : "Released"}</span>`
   : `<span class="pill pill-new">Reserved</span>`;
 const activeItems = (o) => o.order_items.filter((i) => !i.released);
 
@@ -243,7 +243,7 @@ async function viewOrder(id) {
   if (isPicked(o)) actions = `
     <p class="note note-ok" style="margin:0">Receipt checked · Picked up ${fmtDateTime(o.picked_up_at)}</p>
     <button class="btn btn-ghost btn-block btn-sm" data-act="unpicked">Undo pickup</button>`;
-  if (o.status === "released") actions = `<p class="note" style="margin:0">Released ${fmtDateTime(o.released_at)}. These pieces are back in inventory.</p>`;
+  if (o.status === "released") actions = `<p class="note" style="margin:0">${o.cancelled_by_family_at ? `Cancelled by the family ${fmtDateTime(o.cancelled_by_family_at)}` : `Released ${fmtDateTime(o.released_at)}`}. These pieces are back in inventory.</p>`;
 
   app.innerHTML = shell("orders", `
     <a class="back" href="#/orders/${open ? "reserved" : isPicked(o) ? "picked_up" : "released"}" style="margin-top:0">← Reservations</a>
@@ -546,9 +546,12 @@ function viewSettings() {
     </form>
 
     <form class="panel settings-section" id="set-notify">
-      <h2>New-reservation emails</h2>
-      <p class="muted small">Each reservation emails a full record here, ready to forward to the family if they lose their copy. Must match the email on the Resend account.</p>
-      <div class="field"><label for="emails">Send new-reservation alerts to</label><textarea id="emails" rows="2" placeholder="one email per line">${esc((s.notify_emails || []).join("\n"))}</textarea></div>
+      <h2>Emails</h2>
+      <p class="muted small">Admins get an email for every new reservation and every family cancellation — a full record, ready to forward. Until your domain is verified in Resend, alerts can only reach the Resend account owner's email.</p>
+      <div class="field"><label for="emails">Send admin alerts to</label><textarea id="emails" rows="2" placeholder="one email per line">${esc((s.notify_emails || []).join("\n"))}</textarea></div>
+      <label class="check" style="margin-bottom:8px"><input type="checkbox" id="email_families" ${s.email_families ? "checked" : ""}> Email families a confirmation (with their cancel link)</label>
+      <p class="small muted" style="margin:0 0 14px 28px">Turn on only after <strong>calhighceramics.org</strong> is verified in Resend — before that, family emails can't be delivered.</p>
+      <div class="field" style="max-width:420px"><label for="reply_to">When families reply, send it to</label><input id="reply_to" type="email" value="${esc(s.reply_to || "")}" placeholder="name@school.org"><div class="hint">Also shown on the cancel page as the contact for questions.</div></div>
       <button class="btn" type="submit">Save</button>
     </form>
 
@@ -617,7 +620,11 @@ function viewSettings() {
   document.getElementById("instr").addEventListener("input", (e) => {
     document.getElementById("instr-preview").innerHTML = instructionsHtml(e.target.value, val("donate"), D.pickupOptions);
   });
-  saveForm("set-notify", () => ({ notify_emails: val("emails").split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter(Boolean) }), "Notification emails saved");
+  saveForm("set-notify", () => ({
+    notify_emails: val("emails").split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter(Boolean),
+    email_families: document.getElementById("email_families").checked,
+    reply_to: val("reply_to").toLowerCase(),
+  }), "Email settings saved");
   document.getElementById("set-family").addEventListener("submit", async (e) => {
     e.preventDefault();
     try { await api.setFamilyPassword(val("fpw")); toast("Family password updated", "ok"); e.target.reset(); }

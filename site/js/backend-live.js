@@ -53,6 +53,13 @@ export function createLiveBackend({ supabaseUrl, supabaseAnonKey, area = "family
       sb.functions.invoke("order-notify", { body: { order_id: res.order_id } }).catch(() => {});
       return res;
     },
+    // Private cancel link (no sign-in needed; the token is the secret).
+    async getReservationByToken(token) { return unwrap(await sb.rpc("get_reservation_by_token", { t: token })); },
+    async cancelReservation(token) {
+      const res = unwrap(await sb.rpc("cancel_reservation", { t: token }));
+      sb.functions.invoke("order-notify", { body: { cancel_token: token } }).catch(() => {});
+      return res;
+    },
 
     // ───── Admin auth ─────
     async adminSession() {

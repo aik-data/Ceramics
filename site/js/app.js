@@ -322,7 +322,7 @@ function viewCart(error = "") {
       cart.set([]);
       draft = {};
       await loadGallery();
-      receiptPending = true;
+      receiptPending = !info.email_families; // with an emailed confirmation, no need to nag
       location.hash = `#/thanks/${encodeURIComponent(res.order_no)}`;
     } catch (err) {
       const msg = friendlyError(err);
@@ -342,13 +342,16 @@ function viewThanks(orderNo) {
   app.innerHTML = shell(`<div class="wrap page receipt" style="max-width:760px">
     <div class="print-only print-head">${logo("sm")}<div><strong>${esc(info.fundraiser_name)}</strong><br><span class="muted">Reservation confirmation</span></div></div>
 
-    <div class="save-alert no-print" role="alert">
-      <div>
-        <strong>Save this page now.</strong> You will <u>not</u> receive a confirmation email.
-        Print it or save it as a PDF to keep your reservation number and instructions.
-      </div>
-      <button class="btn btn-accent" data-act="print">Print / Save as PDF</button>
-    </div>
+    ${info.email_families
+      ? `<div class="save-alert save-alert-ok no-print" role="status">
+          <div><strong>Confirmation sent.</strong> A copy of this page is on its way to ${s.email ? `<strong>${esc(s.email)}</strong>` : "your email"} — check your spam folder if you don't see it. You can also print or save it.</div>
+          <button class="btn btn-ghost" data-act="print">Print / Save as PDF</button>
+        </div>`
+      : `<div class="save-alert no-print" role="alert">
+          <div><strong>Save this page now.</strong> You will <u>not</u> receive a confirmation email.
+          Print it or save it as a PDF to keep your reservation number and instructions.</div>
+          <button class="btn btn-accent" data-act="print">Print / Save as PDF</button>
+        </div>`}
 
     <div class="eyebrow">Reservation ${esc(s.order_no)}</div>
     <h1>You're reserved!</h1>
@@ -390,7 +393,10 @@ function viewThanks(orderNo) {
     <div class="row no-print" style="margin-top:20px">
       <button class="btn btn-ghost" data-act="print">Print / Save as PDF</button>
       <a class="btn btn-ghost" href="#/">Back to the gallery</a>
-    </div></div>`);
+      ${s.cancel_token ? `<span class="spacer"></span><a class="linkish small" href="#/cancel/${esc(s.cancel_token)}">Cancel this reservation</a>` : ""}
+    </div>
+    ${s.cancel_token ? `<p class="print-only small muted" style="margin-top:14px">To cancel before pickup: ${esc(location.origin + location.pathname)}#/cancel/${esc(s.cancel_token)}</p>` : ""}
+    </div>`);
 }
 
 // ───── "Did you save your reservation?" guard ─────
@@ -521,13 +527,61 @@ document.addEventListener("click", async (e) => {
   }
 });
 
-window.addEventListener("hashchange", () => { if (gallery) route(); });
+window.addEventListener("hashchange", () => {
+  if (location.hash.startsWith("#/cancel/")) return viewCancel(decodeURIComponent(location.hash.split("/")[2] || ""));
+  if (gallery) route();
+});
+
+// ───── Cancel a reservation (from the private link) ─────
+async function viewCancel(token) {
+  document.title = `Cancel reservation — ${info.fundraiser_name}`;
+  receiptPending = false;
+  const contact = info.contact_email ? ` contact <a href="mailto:${esc(info.contact_email)}">${esc(info.contact_email)}</a>` : " contact the Cal High Ceramics program";
+  const page = (inner) => {
+    app.innerHTML = `${api.mode === "demo" ? `<div class="banner banner-demo">Demo mode</div>` : ""}${schoolBanner}
+      <div class="center-card" style="max-width:560px">${logo("lg")}<h1 style="font-size:2.2rem">${esc(info.fundraiser_name)}</h1>
+      <div class="panel">${inner}</div>
+      <p class="small muted" style="margin-top:16px"><a href="#/">Go to the gallery</a></p></div>`;
+  };
+  page(`<div class="spinner" style="margin:30px auto"></div>`);
+  let r = null;
+  try { r = token ? await api.getReservationByToken(token) : null; } catch { r = null; }
+  if (!r) return page(`<h3>Link not recognized</h3><p class="muted">This cancel link isn't valid. Check that you copied the whole link, or${contact}.</p>`);
+  const items = r.items.map((i) => `<li>${esc(i.title)}${i.qty > 1 ? ` × ${i.qty}` : ""} — ${money(i.qty * i.suggested_cents)} suggested</li>`).join("");
+  if (r.state === "cancelled") return page(`<div class="eyebrow">Reservation ${esc(r.order_no)}</div><h3>Already cancelled</h3><p class="muted">This reservation has been cancelled and its pieces are back in the sale.</p>`);
+  if (r.state === "picked_up") return page(`<div class="eyebrow">Reservation ${esc(r.order_no)}</div><h3>Already picked up</h3><p class="muted">This reservation was picked up, so it can't be cancelled online. Questions?${contact}.</p>`);
+  page(`<div class="eyebrow">Reservation ${esc(r.order_no)}</div>
+    <h3>Cancel your reservation${r.first_name ? `, ${esc(r.first_name)}` : ""}?</h3>
+    <p class="muted small">Reserved ${esc(fmtDateTime(r.created_at))}</p>
+    <ul style="padding-left:20px">${items}</ul>
+    <p class="small muted">Cancelling puts these pieces back in the sale for other families. If you already donated, refunds are handled under FutureFund's and the school's policies —${contact}.</p>
+    <div class="row" style="margin-top:14px">
+      <button class="btn btn-danger" id="do-cancel">Yes, cancel my reservation</button>
+      <a class="btn btn-ghost" href="#/">Keep it</a>
+    </div>`);
+  document.getElementById("do-cancel").addEventListener("click", async (e) => {
+    e.target.disabled = true; e.target.textContent = "Cancelling…";
+    try {
+      await api.cancelReservation(token);
+      try { const s = JSON.parse(sessionStorage.getItem(LAST_ORDER_KEY) || "null"); if (s?.cancel_token === token) sessionStorage.removeItem(LAST_ORDER_KEY); } catch {}
+      if (gallery) await loadGallery().catch(() => {});
+      page(`<div class="eyebrow">Reservation ${esc(r.order_no)}</div><h3>Your reservation is cancelled</h3><p class="muted">The pieces are back in the sale. Thank you for letting us know!</p>`);
+    } catch (err) {
+      const m = String(err?.message || "");
+      if (m.includes("ALREADY_CANCELLED")) return viewCancel(token);
+      if (m.includes("ALREADY_PICKED_UP")) return viewCancel(token);
+      toast(friendlyError(err), "error"); e.target.disabled = false; e.target.textContent = "Yes, cancel my reservation";
+    }
+  });
+}
 
 // ───── Boot ─────
 (async function boot() {
   try {
     api = await getApi();
     info = await api.getPublicInfo();
+    // Private cancel links work without the family password.
+    if (location.hash.startsWith("#/cancel/")) return viewCancel(decodeURIComponent(location.hash.split("/")[2] || ""));
     const signedIn = await api.familySession();
     if (info.sale_state === "upcoming") {
       // Admins signed in on this device can still preview the gallery.

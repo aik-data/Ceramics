@@ -185,6 +185,7 @@ export const DEFAULT_TERMS = [
   "A reservation holds your piece — it is not a purchase. To complete it, donate the suggested amount through the FutureFund link shown after you reserve.",
   "Pickup: bring your FutureFund receipt to the {pickup_place} before or after school on {pickup_days}. Pieces are released only when a receipt is shown.",
   "Unclaimed reservations may be released back to the sale after the last pickup day.",
+  "You can cancel your reservation any time before pickup using the cancel link on your reservation page or in your confirmation email. If you already donated, refunds are handled under FutureFund's and the school's policies — contact the Cal High Ceramics program with questions.",
   "Handmade by students: each piece is unique and may vary from its photos. Pieces are sold as-is. Pieces are decorative and not food- or microwave-safe unless the listing is marked “Food safe”.",
   "Donations are made to the Cal High Ceramics program through FutureFund. Refunds and tax receipts are handled under FutureFund's and the school's policies.",
   "Your information: we use your name, email, and phone only to manage your reservation and pickup. We don't share it, and we delete it after the sale.",

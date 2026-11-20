@@ -334,3 +334,5 @@ dialog .dlg-foot { display: flex; gap: 10px; justify-content: flex-end; padding:
 .terms-check [aria-invalid=true] { outline: 2px solid var(--bad); outline-offset: 2px; }
 .tag { display: inline-block; font-size: .72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-top: 4px; }
 .tag-food { background: #e7efe8; color: #2f5a3e; }
+
+.save-alert-ok { background: #eef6f0; border-color: #8fb79b; }
