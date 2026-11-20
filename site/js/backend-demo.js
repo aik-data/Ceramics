@@ -4,7 +4,7 @@
 import { resizeImage, blobToDataUrl, saleState } from "./util.js";
 import { seedDemo } from "./demo-seed.js";
 
-const KEY = "ceramics-demo-v2";
+const KEY = "ceramics-demo-v3";
 const SESSION = "ceramics-demo-session";
 export const DEMO_FAMILY_PASSWORD = "clay";
 export const DEMO_ADMIN_PASSWORD = "demo";
@@ -61,7 +61,7 @@ export function createDemoBackend() {
       return {
         fundraiser_name: s.fundraiser_name, school_name: s.school_name, intro: s.intro,
         sale_opens_at: s.sale_opens_at, sale_closes_at: s.sale_closes_at, sale_state: saleState(s),
-        donate_url: s.donate_url, instructions: s.instructions,
+        donate_url: s.donate_url, instructions: s.instructions, terms: s.terms || "",
       };
     },
     async familySession() { return isMember(); },
@@ -91,6 +91,7 @@ export function createDemoBackend() {
       if (saleState(db.settings) !== "open") throw new Error("SALE_NOT_OPEN");
       if (![o.parent_name, o.email, o.phone].every((v) => String(v ?? "").trim())) throw new Error("MISSING_FIELDS");
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(o.email)) throw new Error("BAD_EMAIL");
+      if (o.agreed_terms !== true) throw new Error("TERMS_REQUIRED");
       if (!o.items?.length) throw new Error("EMPTY_CART");
       const st = stock(db);
       const items = [];
@@ -103,7 +104,7 @@ export function createDemoBackend() {
         id: uid(), order_no: "CER-" + db.nextOrderNo++, created_at: new Date().toISOString(),
         parent_name: o.parent_name.trim(), email: o.email.trim().toLowerCase(), phone: (o.phone || "").trim(),
         student_name: "", student_class: "", pickup_option_id: null, pickup_label: "",
-        notes: (o.notes || "").trim(), picked_up_at: null,
+        notes: (o.notes || "").trim(), picked_up_at: null, terms_agreed_at: new Date().toISOString(),
         status: "new", seen_at: null, invoice_sent_at: null, paid_at: null, amount_received_cents: null,
         released_at: null, notified_at: new Date().toISOString(), order_items: items,
       };
@@ -175,6 +176,15 @@ export function createDemoBackend() {
       else Object.assign(db.pieces.find((p) => p.id === row.id), row);
       save(db);
       return row;
+    },
+    async eraseContacts(orderIds) {
+      const db = load();
+      for (const o of db.orders) {
+        if (!orderIds.includes(o.id)) continue;
+        Object.assign(o, { parent_name: "(erased)", email: "", phone: "", notes: "" });
+        db.activity.unshift({ id: uid(), at: new Date().toISOString(), admin_email: session().admin, order_id: o.id, action: "Family details erased", detail: "" });
+      }
+      save(db);
     },
     async deletePiece(piece) {
       const db = load();

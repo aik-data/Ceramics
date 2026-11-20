@@ -83,9 +83,10 @@ Deno.serve(async (req) => {
     const siteUrl = (Deno.env.get("SITE_URL") ?? "https://calhighceramics.org").replace(/\/$/, "");
     const items = order.order_items.filter((i: any) => !i.released);
     const total = items.reduce((s: number, i: any) => s + i.qty * i.suggested_cents, 0);
-    const placed = new Date(order.created_at).toLocaleString("en-US", {
+    const fmt = (iso: string) => new Date(iso).toLocaleString("en-US", {
       timeZone: settings.timezone || "America/Los_Angeles", dateStyle: "full", timeStyle: "short",
     });
+    const placed = fmt(order.created_at);
     const link = settings.donate_url || "";
     const days = pickupDaysText(pickups ?? []);
     const places = [...new Set((pickups ?? []).map((p: any) => p.location).filter(Boolean))].join(" / ");
@@ -113,6 +114,7 @@ Deno.serve(async (req) => {
         ${kv("Email", `<a href="mailto:${esc(order.email)}">${esc(order.email)}</a>`)}
         ${kv("Phone", esc(order.phone))}
         ${order.notes ? kv("Notes", esc(order.notes)) : ""}
+        ${kv("Terms", order.terms_agreed_at ? `Agreed ${esc(fmt(order.terms_agreed_at))}` : "—")}
       </table>
       <h3 style="margin:22px 0 6px;font-weight:600">Items</h3>
       ${table}
@@ -134,6 +136,7 @@ Deno.serve(async (req) => {
       `Email: ${order.email}`,
       `Phone: ${order.phone}`,
       ...(order.notes ? [`Notes: ${order.notes}`] : []),
+      ...(order.terms_agreed_at ? [`Agreed to reservation terms: ${fmt(order.terms_agreed_at)}`] : []),
       ``,
       `Items:`,
       ...items.map((i: any) => `- ${i.title}${i.qty > 1 ? ` x ${i.qty}` : ""} (${money(i.qty * i.suggested_cents)})`),

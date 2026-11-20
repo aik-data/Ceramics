@@ -79,6 +79,7 @@ export function friendlyError(e) {
   if (m.includes("SALE_NOT_OPEN")) return "The sale isn't open right now, so orders can't be placed.";
   if (m.includes("MISSING_FIELDS")) return "Please fill in all required fields.";
   if (m.includes("BAD_EMAIL")) return "Please enter a valid email address.";
+  if (m.includes("TERMS_REQUIRED")) return "Please agree to the reservation terms.";
   if (m.includes("BAD_PICKUP")) return "Please choose a pickup option.";
   if (m.includes("EMPTY_CART")) return "Your cart is empty.";
   if (m.includes("NOT_SIGNED_IN")) return "Please sign in again.";
@@ -177,3 +178,22 @@ export function instructionsHtml(template, link, options) {
 }
 export const DEFAULT_CREDIT = "a Cal High Ceramics 1 student";
 export const credit = (artist) => `Handcrafted by ${artist || DEFAULT_CREDIT}`;
+
+// ───── Reservation terms ─────
+// One term per line. {pickup_days} and {pickup_place} are filled in from the pickup settings.
+export const DEFAULT_TERMS = [
+  "A reservation holds your piece — it is not a purchase. To complete it, donate the suggested amount through the FutureFund link shown after you reserve.",
+  "Pickup: bring your FutureFund receipt to the {pickup_place} before or after school on {pickup_days}. Pieces are released only when a receipt is shown.",
+  "Unclaimed reservations may be released back to the sale after the last pickup day.",
+  "Handmade by students: each piece is unique and may vary from its photos. Pieces are sold as-is. Pieces are decorative and not food- or microwave-safe unless the listing is marked “Food safe”.",
+  "Donations are made to the Cal High Ceramics program through FutureFund. Refunds and tax receipts are handled under FutureFund's and the school's policies.",
+  "Your information: we use your name, email, and phone only to manage your reservation and pickup. We don't share it, and we delete it after the sale.",
+  "The school may change or cancel the sale or a reservation if needed. Questions? Contact the Cal High Ceramics program.",
+].join("\n");
+export function termsLines(template, options = []) {
+  const place = [...new Set(options.filter((o) => o.active !== false).map((o) => o.location).filter(Boolean))].join(" / ") || "the pickup location";
+  return (template || DEFAULT_TERMS).split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+    .map((l) => l.replaceAll("{pickup_days}", pickupDaysText(options)).replaceAll("{pickup_place}", place));
+}
+export const termsHtml = (template, options) =>
+  `<ol class="terms-list">${termsLines(template, options).map((l) => `<li>${esc(l)}</li>`).join("")}</ol>`;

@@ -323,3 +323,14 @@ dialog .dlg-foot { display: flex; gap: 10px; justify-content: flex-end; padding:
 .pill-picked { background: #e3e8f4; color: #2e4476; }
 
 .pickup-days { list-style: none; padding: 0; margin: 10px 0 8px; font-family: var(--serif); font-size: 1.5rem; line-height: 1.3; }
+
+/* Terms & food-safe tag */
+.terms-list { padding-left: 22px; margin: 10px 0 0; }
+.terms-list li { margin: 6px 0; font-size: .92rem; color: var(--ink-2); }
+.terms-modal { max-height: 86vh; overflow: auto; }
+.terms-panel summary { cursor: pointer; }
+.terms-check .check { align-items: flex-start; }
+.terms-check .check input { margin-top: 3px; }
+.terms-check [aria-invalid=true] { outline: 2px solid var(--bad); outline-offset: 2px; }
+.tag { display: inline-block; font-size: .72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-top: 4px; }
+.tag-food { background: #e7efe8; color: #2f5a3e; }

@@ -146,6 +146,12 @@ export function createLiveBackend({ supabaseUrl, supabaseAnonKey, area = "family
       if (!row.id) delete row.id;
       return unwrap(await sb.from("pieces").upsert(row).select().single());
     },
+    async eraseContacts(orderIds) {
+      if (!orderIds.length) return;
+      unwrap(await sb.from("orders").update({ parent_name: "(erased)", email: "", phone: "", notes: "" }).in("id", orderIds));
+      const admin_email = await currentEmail();
+      await sb.from("activity").insert(orderIds.map((order_id) => ({ order_id, action: "Family details erased", admin_email })));
+    },
     async deletePiece(piece) {
       const { error } = await sb.from("pieces").delete().eq("id", piece.id);
       if (error) {

@@ -4,6 +4,7 @@ import {
   esc, money, toCents, toDollars, fmtDateTime, fmtDate, pickupText, ago, toast, friendlyError,
   isoToLocalInput, localInputToIso, downloadCsv, parseCsv, orderTotal,
   instructionsText, instructionsHtml, pickupDaysText, DEFAULT_INSTRUCTIONS, DEFAULT_CREDIT, credit,
+  DEFAULT_TERMS, termsHtml,
 } from "./util.js";
 
 const app = document.getElementById("app");
@@ -208,6 +209,7 @@ function reservationText(o) {
     `Email: ${o.email}`,
     `Phone: ${o.phone}`,
     ...(o.notes ? [`Notes: ${o.notes}`] : []),
+    ...(o.terms_agreed_at ? [`Agreed to reservation terms: ${fmtDateTime(o.terms_agreed_at)}`] : []),
     ``,
     `Items:`,
     ...items.map((i) => `• ${i.title}${i.qty > 1 ? ` × ${i.qty}` : ""} — ${money(i.qty * i.suggested_cents)} suggested`),
@@ -257,6 +259,7 @@ async function viewOrder(id) {
             ${o.student_name ? `<dt>Student</dt><dd>${esc(o.student_name)}${o.student_class ? ` — ${esc(o.student_class)}` : ""}</dd>` : ""}
             ${o.pickup_label ? `<dt>Pickup</dt><dd>${esc(o.pickup_label)}</dd>` : ""}
             ${o.notes ? `<dt>Notes</dt><dd>${esc(o.notes)}</dd>` : ""}
+            <dt>Terms</dt><dd>${o.terms_agreed_at ? `Agreed ${fmtDateTime(o.terms_agreed_at)}` : `<span class="muted">Reserved before terms were added</span>`}</dd>
           </dl>
         </div>
         <div class="panel">
@@ -349,7 +352,7 @@ function viewListings() {
         <td>${esc(p.category)}</td>
         <td class="num">${money(p.suggested_cents)}</td><td class="num">${p.quantity}</td>
         <td class="num">${Math.max(0, p.available)}</td><td class="num">${p.held}</td><td class="num">${p.sold}</td>
-        <td>${p.hidden ? `<span class="pill pill-hidden">Hidden</span>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+        <td>${p.food_safe ? `<span class="pill pill-paid">Food safe</span> ` : ""}${p.hidden ? `<span class="pill pill-hidden">Hidden</span>` : ""}</td></tr>`).join("")}</tbody></table></div>`
       : `<div class="panel empty"><p>No pieces yet.</p><a class="btn" href="#/listing/new">Add your first piece</a></div>`}
     <p class="small muted" style="margin-top:14px">CSV import columns: <code>title, description, category, suggested, quantity</code> (with a header row), plus an optional <code>artist</code> column — blank means “${esc(DEFAULT_CREDIT)}”. Photos are added afterward.</p>`);
 
@@ -410,6 +413,7 @@ function viewListing(id) {
         <div class="field"><label for="quantity">Quantity <span class="req">*</span></label><input id="quantity" type="number" min="${Math.max(1, committed)}" required value="${p.quantity}"><div class="hint">${committed ? `${p.held} on hold and ${p.sold} sold, so the minimum is ${committed}.` : "Use 1 for one-of-a-kind pieces."}</div></div>
       </div>
       <div class="field"><label for="description">Description</label><textarea id="description" rows="4">${esc(p.description)}</textarea></div>
+      <label class="check" style="margin-bottom:10px"><input type="checkbox" id="food_safe" ${p.food_safe ? "checked" : ""}> Food safe <span class="muted small">(e.g. mugs with handles) — otherwise shown as decorative</span></label>
       <label class="check" style="margin-bottom:20px"><input type="checkbox" id="hidden" ${p.hidden ? "checked" : ""}> Hide from the gallery</label>
       <div class="row"><button class="btn" type="submit">${isNew ? "Add piece" : "Save changes"}</button><a class="btn btn-ghost" href="#/listings">Cancel</a>
         ${isNew ? "" : `<span class="spacer"></span><button class="btn btn-danger" type="button" id="del-piece">Delete piece</button>`}</div>
@@ -453,6 +457,7 @@ function viewListing(id) {
         ...(isNew ? { sort: D.pieces.length } : { id: p.id }),
         title: v("title"), artist: v("artist"), category: v("category"), description: v("description"),
         suggested_cents: toCents(v("suggested")), quantity: qty, photos, hidden: document.getElementById("hidden").checked,
+        food_safe: document.getElementById("food_safe").checked,
       });
       await reload(); toast(isNew ? "Piece added" : "Saved", "ok"); location.hash = "#/listings";
     } catch (err) { toast(friendlyError(err), "error"); }
@@ -524,6 +529,14 @@ function viewSettings() {
       <button class="btn" type="submit">Save instructions</button>
     </form>
 
+    <form class="panel settings-section" id="set-terms">
+      <h2>Reservation terms</h2>
+      <p class="muted small">Families must tick “I agree to the reservation terms” before reserving. One term per line. <code>{pickup_days}</code> and <code>{pickup_place}</code> are filled in from your pickup days.</p>
+      <div class="field"><label for="terms">Terms</label><textarea id="terms" rows="10">${esc(s.terms || DEFAULT_TERMS)}</textarea></div>
+      <div class="note" style="margin-bottom:16px"><strong>Families will see:</strong> <span id="terms-preview">${termsHtml(s.terms, D.pickupOptions)}</span></div>
+      <button class="btn" type="submit">Save terms</button>
+    </form>
+
     <form class="panel settings-section" id="set-money">
       <h2>Donation link</h2>
       <div class="grid-2">
@@ -557,6 +570,12 @@ function viewSettings() {
     </form>
 
     <section class="panel settings-section">
+      <h2>Family privacy</h2>
+      <p class="muted small">After the sale, erase families' contact details as promised in the terms. Only picked-up and released reservations are erased; their reservation numbers and pieces are kept for your records.</p>
+      <button class="btn btn-danger" type="button" id="erase-contacts">Erase family details…</button>
+    </section>
+
+    <section class="panel settings-section">
       <h2>Admins</h2>
       <table class="list" style="margin-bottom:14px"><tbody>
         ${D.admins.map((a) => `<tr><td>${esc(a.email)}${a.email === me.email ? ` <span class="muted small">(you)</span>` : ""}</td>
@@ -581,6 +600,20 @@ function viewSettings() {
   saveForm("set-money", () => ({
     donate_url: val("donate") || "https://www.futurefund.com/" }));
   saveForm("set-instr", () => ({ instructions: val("instr") || DEFAULT_INSTRUCTIONS }), "Instructions saved");
+  saveForm("set-terms", () => ({ terms: val("terms") || DEFAULT_TERMS }), "Terms saved");
+  document.getElementById("terms").addEventListener("input", (e) => {
+    document.getElementById("terms-preview").innerHTML = termsHtml(e.target.value, D.pickupOptions);
+  });
+  document.getElementById("erase-contacts").addEventListener("click", async () => {
+    const done = D.orders.filter((o) => (isPicked(o) || o.status === "released") && (o.email || o.phone));
+    if (!done.length) return toast("Nothing to erase — no completed or released reservations have contact details.");
+    if (await confirmDialog("Erase family details?",
+      `This permanently removes the name, email, phone and notes from <strong>${done.length}</strong> picked-up or released reservation${done.length === 1 ? "" : "s"}. Reservation numbers and pieces are kept. Reservations still waiting for pickup are not touched. This can't be undone.`,
+      "Erase details", true)) {
+      try { await api.eraseContacts(done.map((o) => o.id)); await reload(); toast(`Erased details from ${done.length} reservation${done.length === 1 ? "" : "s"}`, "ok"); viewSettings(); }
+      catch (err) { toast(friendlyError(err), "error"); }
+    }
+  });
   document.getElementById("instr").addEventListener("input", (e) => {
     document.getElementById("instr-preview").innerHTML = instructionsHtml(e.target.value, val("donate"), D.pickupOptions);
   });

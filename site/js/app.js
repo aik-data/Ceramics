@@ -3,7 +3,7 @@
 import { getApi } from "./api.js";
 import {
   esc, money, fmtDateTime, fmtDate, toast, friendlyError,
-  pickupDaysText, instructionsHtml, credit, DEFAULT_INSTRUCTIONS,
+  pickupDaysText, instructionsHtml, credit, DEFAULT_INSTRUCTIONS, termsHtml,
 } from "./util.js";
 
 const app = document.getElementById("app");
@@ -175,6 +175,7 @@ function viewGallery() {
         <div class="meta">
           <div class="title">${esc(p.title)}</div>
           <div class="artist">${esc(credit(p.artist))}</div>
+          ${p.food_safe ? `<div class="small"><span class="tag tag-food">Food safe</span></div>` : ""}
           <div class="price">${money(p.suggested_cents)} <span class="muted small">suggested donation</span></div>
         </div>
       </a>`).join("")}</div>` : `<div class="empty">No pieces match this filter.</div>`}
@@ -210,6 +211,7 @@ function viewPiece(id) {
         ${p.category ? `<div class="eyebrow">${esc(p.category)}</div>` : ""}
         <h1 style="font-size:clamp(2rem,4vw,2.8rem)">${esc(p.title)}</h1>
         <div class="muted">${esc(credit(p.artist))}</div>
+        <p class="small" style="margin:10px 0 0">${p.food_safe ? `<span class="tag tag-food">Food safe</span>` : `<span class="muted">Decorative — not food or microwave safe</span>`}</p>
         <div class="price-lg">${money(p.suggested_cents)} <span class="small muted">suggested donation</span></div>
         ${p.description ? `<p style="margin-top:18px">${esc(p.description)}</p>` : ""}
         <div style="margin-top:24px">${action}</div>
@@ -257,6 +259,9 @@ function viewCart(error = "") {
         <div class="field"><label for="email">Email <span class="req">*</span></label><input id="email" type="email" autocomplete="email" required value="${esc(saved.email)}"><div class="hint">So we can contact you about your reservation.</div></div>
         <div class="field"><label for="phone">Phone <span class="req">*</span></label><input id="phone" type="tel" autocomplete="tel" inputmode="tel" required value="${esc(saved.phone)}"></div>
         <div class="field"><label for="notes">Notes <span class="muted small">(optional)</span></label><textarea id="notes" rows="3">${esc(saved.notes)}</textarea></div>
+        <div class="field terms-check">
+          <label class="check"><input type="checkbox" id="agree"> <span>I agree to the <button type="button" class="linkish" data-act="show-terms">reservation terms</button> <span class="req">*</span></span></label>
+        </div>
         <p class="note note-bad ${error ? "" : "hidden"}" role="alert" id="form-error">${esc(error)}</p>
         ${canCheckout()
           ? `<button class="btn btn-accent btn-block" type="submit">Reserve · ${money(total)}</button>
@@ -283,6 +288,7 @@ function viewCart(error = "") {
       first_name: f("first_name"), last_name: f("last_name"),
       parent_name: `${f("first_name")} ${f("last_name")}`.trim(), email: f("email"), phone: f("phone"),
       notes: f("notes"),
+      agreed_terms: document.getElementById("agree").checked,
       items: cart.get().map(({ piece_id, qty }) => ({ piece_id, qty })),
     };
     const missing = ["first_name", "last_name", "email", "phone"].filter((k) => !f(k));
@@ -297,6 +303,7 @@ function viewCart(error = "") {
     if (missing.length) return fail(missing, "Please fill in the fields marked in red.");
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(order.email)) return fail("email", "Please check the email address.");
     if (order.phone.replace(/\D/g, "").length < 7) return fail("phone", "Please check the phone number.");
+    if (!order.agreed_terms) return fail("agree", "Please read and agree to the reservation terms.");
     errBox.classList.add("hidden");
     try { localStorage.setItem("ceramics-contact", JSON.stringify({ first_name: order.first_name, last_name: order.last_name, email: order.email, phone: order.phone })); } catch {}
 
@@ -307,7 +314,7 @@ function viewCart(error = "") {
       const res = await api.placeOrder(payload);
       const summary = {
         ...res, name: order.parent_name, email: order.email, phone: order.phone, notes: order.notes,
-        placed_at: new Date().toISOString(),
+        placed_at: new Date().toISOString(), terms_agreed_at: new Date().toISOString(),
         items: items.map((i) => ({ title: i.p.title, artist: i.p.artist, qty: i.qty, cents: i.qty * i.p.suggested_cents, photo: i.p.photos?.[0] })),
         total,
       };
@@ -375,6 +382,11 @@ function viewThanks(orderNo) {
         <div>${money(i.cents)}</div></div>`).join("")}
       <div class="totals"><span>Suggested donation</span><strong>${money(s.total)}</strong></div></div>` : ""}
 
+    <details class="panel terms-panel" style="margin-top:22px">
+      <summary><strong>Reservation terms</strong>${s.terms_agreed_at ? ` <span class="small muted">— you agreed ${esc(fmtDateTime(s.terms_agreed_at))}</span>` : ""}</summary>
+      ${termsHtml(info.terms, pickupOptions())}
+    </details>
+
     <div class="row no-print" style="margin-top:20px">
       <button class="btn btn-ghost" data-act="print">Print / Save as PDF</button>
       <a class="btn btn-ghost" href="#/">Back to the gallery</a>
@@ -410,6 +422,8 @@ window.addEventListener("beforeunload", (e) => {
   if (receiptPending && location.hash.startsWith("#/thanks")) { e.preventDefault(); e.returnValue = ""; }
 });
 window.addEventListener("afterprint", () => { receiptPending = false; });
+// Make sure collapsed sections (like the terms) are included on the printout.
+window.addEventListener("beforeprint", () => document.querySelectorAll("details").forEach((d) => (d.open = true)));
 // Catch in-app links away from the reservation page.
 document.addEventListener("click", (e) => {
   if (!receiptPending || !location.hash.startsWith("#/thanks")) return;
@@ -465,6 +479,33 @@ document.addEventListener("click", async (e) => {
     }
     case "remove": cart.set(cart.get().filter((i) => i.piece_id !== t.dataset.id)); viewCart(); break;
     case "print": window.print(); break;
+    case "show-terms": {
+      const box = document.createElement("div");
+      box.className = "lightbox guard";
+      box.setAttribute("role", "dialog");
+      box.setAttribute("aria-modal", "true");
+      box.setAttribute("aria-label", "Reservation terms");
+      box.innerHTML = `<div class="panel terms-modal" style="max-width:620px;cursor:auto">
+        <h3>Reservation terms</h3>
+        ${termsHtml(info.terms, pickupOptions())}
+        <div class="row" style="margin-top:16px">
+          <button class="btn btn-accent" data-t="agree">I agree</button>
+          <button class="btn btn-ghost" data-t="close">Close</button>
+        </div></div>`;
+      box.addEventListener("click", (ev) => {
+        const tAct = ev.target.closest("[data-t]")?.dataset.t;
+        if (!tAct && ev.target !== box) return;
+        if (tAct === "agree") {
+          const cb = document.getElementById("agree");
+          if (cb) { cb.checked = true; cb.removeAttribute("aria-invalid"); }
+        }
+        box.remove();
+      });
+      document.addEventListener("keydown", function k(ev) { if (ev.key === "Escape") { box.remove(); document.removeEventListener("keydown", k); } });
+      document.body.appendChild(box);
+      box.querySelector("[data-t=agree]").focus();
+      break;
+    }
     case "zoom": {
       const src = document.getElementById("main-img")?.src;
       if (!src) return;

@@ -21,6 +21,7 @@ export function seedDemo() {
     ["p12", "Forest Mug", CREDIT, "A sturdy mug in forest green with a comfortable thumb rest.", "Mugs", 2200, 1, "forest-mug"],
   ].map(([id, title, artist, description, category, suggested_cents, quantity, pic], i) => ({
     id, title, artist, description, category, suggested_cents, quantity, photos: [img(pic)], hidden: false, sort: i,
+    food_safe: ["p3", "p12"].includes(id), // the mugs with handles
     created_at: iso(-10 * day + i * 1000),
   }));
 
@@ -55,6 +56,7 @@ export function seedDemo() {
       school_name: "Student Ceramics Sale",
       intro: "Every piece in this gallery was handcrafted by a Cal High Ceramics 1 student. Reserve your favorites here, donate the suggested amount on FutureFund, and pick them up at school.",
       instructions: "Once you have reserved your item, go to this link {link} and donate the suggested amount. Save your receipt — you will need it to pick up your item before or after school on {pickup_days}.",
+      terms: "",
       goal_cents: 250000,
       sale_opens_at: iso(-2 * day),
       sale_closes_at: iso(14 * day),
