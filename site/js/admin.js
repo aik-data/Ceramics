@@ -147,7 +147,7 @@ function viewDashboard() {
 
     ${news.length ? `<section class="alert-new" aria-live="polite">
       <h2>New reservations (${news.length})</h2>
-      <div class="table-wrap"><table class="list"><tbody>
+      <div class="table-wrap"><table class="list stack"><tbody>
       ${news.map((o) => `<tr class="clickable" data-href="#/order/${o.id}">
         <td><span class="unread-dot"></span><strong>${esc(o.order_no)}</strong></td><td>${esc(o.parent_name)}</td>
         <td>${activeItems(o).length} item${activeItems(o).length === 1 ? "" : "s"}</td>
@@ -184,7 +184,7 @@ function viewOrders(tab = "reserved") {
   app.innerHTML = shell("orders", `
     <div class="admin-top"><h1>Reservations</h1><span class="spacer"></span><button class="btn btn-ghost btn-sm" data-act="refresh">Refresh</button></div>
     <nav class="tabs">${tabs.map(([k, l]) => `<a href="#/orders/${k}" aria-current="${k === tab}">${l}<span class="n">${D.orders.filter((o) => tabMatch(o, k)).length}</span></a>`).join("")}</nav>
-    ${list.length ? `<div class="table-wrap"><table class="list">
+    ${list.length ? `<div class="table-wrap"><table class="list stack">
       <thead><tr><th>Reservation</th><th>Name</th><th>Phone</th><th>Items</th><th class="num">Total</th><th>Status</th><th>Reserved</th></tr></thead>
       <tbody>${list.map((o) => `<tr class="clickable" data-href="#/order/${o.id}">
         <td>${!o.seen_at && isOpen(o) ? `<span class="unread-dot" title="Unread"></span>` : ""}<strong>${esc(o.order_no)}</strong></td>
@@ -344,14 +344,14 @@ function viewListings() {
     <div class="admin-top"><h1>Listings</h1><span class="spacer"></span>
       <label class="btn btn-ghost btn-sm" style="margin:0">Import CSV<input type="file" accept=".csv,text/csv" id="csv" class="sr-only"></label>
       <a class="btn btn-sm" href="#/listing/new">Add piece</a></div>
-    ${pieces.length ? `<div class="table-wrap"><table class="list">
-      <thead><tr><th></th><th>Piece</th><th>Category</th><th class="num">Suggested</th><th class="num">Qty</th><th class="num">Available</th><th class="num">On hold</th><th class="num">Sold</th><th></th></tr></thead>
+    ${pieces.length ? `<div class="table-wrap"><table class="list stack">
+      <thead><tr><th></th><th>Piece</th><th>Category</th><th class="num">Suggested</th><th class="num">Qty</th><th class="num">Available</th><th class="num">Reserved</th><th class="num">Sold</th><th></th></tr></thead>
       <tbody>${pieces.map((p) => `<tr class="clickable" data-href="#/listing/${p.id}">
         <td style="width:60px">${p.photos?.[0] ? `<img class="thumb-sm" src="${esc(p.photos[0])}" alt="">` : `<div class="thumb-sm"></div>`}</td>
         <td><strong>${esc(p.title)}</strong><div class="small muted">${esc(credit(p.artist))}</div></td>
         <td>${esc(p.category)}</td>
-        <td class="num">${money(p.suggested_cents)}</td><td class="num">${p.quantity}</td>
-        <td class="num">${Math.max(0, p.available)}</td><td class="num">${p.held}</td><td class="num">${p.sold}</td>
+        <td class="num" data-label="Suggested">${money(p.suggested_cents)}</td><td class="num" data-label="Qty">${p.quantity}</td>
+        <td class="num" data-label="Available">${Math.max(0, p.available)}</td><td class="num" data-label="Reserved">${p.held}</td><td class="num" data-label="Sold">${p.sold}</td>
         <td>${p.food_safe ? `<span class="pill pill-paid">Food safe</span> ` : ""}${p.hidden ? `<span class="pill pill-hidden">Hidden</span>` : ""}</td></tr>`).join("")}</tbody></table></div>`
       : `<div class="panel empty"><p>No pieces yet.</p><a class="btn" href="#/listing/new">Add your first piece</a></div>`}
     <p class="small muted" style="margin-top:14px">CSV import columns: <code>title, description, category, suggested, quantity</code> (with a header row), plus an optional <code>artist</code> column — blank means “${esc(DEFAULT_CREDIT)}”. Photos are added afterward.</p>`);
