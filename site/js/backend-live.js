@@ -122,7 +122,7 @@ export function createLiveBackend({ supabaseUrl, supabaseAnonKey, area = "family
           return log(order.id, "Payment undone");
         case "paid_picked_up":
           await upd({ status: "paid", paid_at: now, picked_up_at: now, seen_at: order.seen_at ?? now });
-          return log(order.id, "Receipt checked — paid and picked up");
+          return log(order.id, "Receipt checked — picked up");
         case "picked_up":
           await upd({ picked_up_at: now });
           return log(order.id, "Picked up");

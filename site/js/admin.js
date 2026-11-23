@@ -547,10 +547,10 @@ function viewSettings() {
 
     <form class="panel settings-section" id="set-notify">
       <h2>Emails</h2>
-      <p class="muted small">Admins get an email for every new reservation and every family cancellation — a full record, ready to forward. Until your domain is verified in Resend, alerts can only reach the Resend account owner's email.</p>
+      <p class="muted small">Admins get an email for every new reservation and every family cancellation — a full record, ready to forward. Emails are sent from <strong>sale@calhighceramics.org</strong>.</p>
       <div class="field"><label for="emails">Send admin alerts to</label><textarea id="emails" rows="2" placeholder="one email per line">${esc((s.notify_emails || []).join("\n"))}</textarea></div>
       <label class="check" style="margin-bottom:8px"><input type="checkbox" id="email_families" ${s.email_families ? "checked" : ""}> Email families a confirmation (with their cancel link)</label>
-      <p class="small muted" style="margin:0 0 14px 28px">Turn on only after <strong>calhighceramics.org</strong> is verified in Resend — before that, family emails can't be delivered.</p>
+      <p class="small muted" style="margin:0 0 14px 28px">Families get their reservation details, the donation link, the terms and a link to cancel.</p>
       <div class="field" style="max-width:420px"><label for="reply_to">When families reply, send it to</label><input id="reply_to" type="email" value="${esc(s.reply_to || "")}" placeholder="name@school.org"><div class="hint">Also shown on the cancel page as the contact for questions.</div></div>
       <button class="btn" type="submit">Save</button>
     </form>

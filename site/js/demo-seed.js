@@ -80,9 +80,7 @@ export function seedDemo() {
       { id: "d2", amount_cents: 2500, donated_on: dateOnly(-1), name: "", note: "Anonymous", created_at: iso(-1 * day) },
     ],
     activity: [
-      { id: "a0", at: iso(-1 * day), admin_email: "admin@example.org", order_id: "o1", action: "Picked up", detail: "" },
-      { id: "a1", at: iso(-4 * day), admin_email: "admin@example.org", order_id: "o1", action: "Marked paid", detail: "" },
-      { id: "a2", at: iso(-0.9 * day), admin_email: "admin@example.org", order_id: "o2", action: "Marked paid", detail: "" },
+      { id: "a0", at: iso(-1 * day), admin_email: "admin@example.org", order_id: "o1", action: "Receipt checked — picked up", detail: "" },
     ],
     admins: [{ user_id: "demo-admin", email: "admin@example.org", created_at: iso(-10 * day) }],
   };
