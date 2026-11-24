@@ -66,7 +66,7 @@ export function seedDemo() {
       sale_closes_at: iso(14 * day),
       checkout_paused: false,
       overdue_hours: 48,
-      donate_url: "https://www.futurefund.com/",
+      donate_url: "https://calhigh.futurefund.com/store/campaigns/79740-ceramic-website-purchases",
       notify_emails: ["admin@example.org"],
       expenses_cents: 0,
     },

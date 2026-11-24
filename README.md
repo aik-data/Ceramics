@@ -75,5 +75,5 @@ Admin email addresses and family details live only in Supabase, never in this pu
 2. Open the order and click **Copy invoice details**. Create the invoice in FutureFund with the order number in the memo, then click **Mark invoice sent**.
 3. When FutureFund shows the payment, click **Mark paid** and enter the amount received.
 4. Orders still unpaid 48 hours after the invoice is sent are flagged **Overdue**. Send a reminder, or **Release** the order to put its pieces back on sale.
-5. Record donations made through the FutureFund donation page under **Donations**, so they count toward the goal.
+5. Record donations made through the [FutureFund donation page](https://calhigh.futurefund.com/store/campaigns/79740-ceramic-website-purchases) under **Donations**, so they count toward the goal.
 6. Use **Settings** to change sale dates, pickup dates and times, the family password, the goal, and admins. Use **Reports** to download CSVs.

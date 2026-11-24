@@ -601,7 +601,7 @@ function viewSettings() {
       fundraiser_name: val("fname") || "Student Ceramics Sale", school_name: val("sname"), intro: val("intro") };
   }, "Sale settings saved");
   saveForm("set-money", () => ({
-    donate_url: val("donate") || "https://www.futurefund.com/" }));
+    donate_url: val("donate") || "https://calhigh.futurefund.com/store/campaigns/79740-ceramic-website-purchases" }));
   saveForm("set-instr", () => ({ instructions: val("instr") || DEFAULT_INSTRUCTIONS }), "Instructions saved");
   saveForm("set-terms", () => ({ terms: val("terms") || DEFAULT_TERMS }), "Terms saved");
   document.getElementById("terms").addEventListener("input", (e) => {

@@ -88,7 +88,7 @@ There is no separate volunteer role. Everything behind the scenes is done by adm
 ### 4.5 Donate (extra giving)
 - Families can give an extra donation **without buying a piece and without an invoice**.
 - A **"Make a donation"** button appears in the header, on the home page, and on the checkout confirmation page.
-- It opens the school's **FutureFund donation page** directly. The link is set in admin settings. *Until the school's donation page exists, it points to the FutureFund home page.*
+- It opens the school's **FutureFund donation page** directly: https://calhigh.futurefund.com/store/campaigns/79740-ceramic-website-purchases. The link is set in admin settings.
 - The site never sees these payments. To count a donation toward the goal, an admin records it in the dashboard (§6.4).
 
 ### 4.6 Sale dates
@@ -218,7 +218,7 @@ After the sale closes, there is no special process for unsold pieces. They simpl
 
 ## 9. Open items
 
-1. **FutureFund donation page:** the school will add it later. Until then, the Donate button links to the FutureFund home page.
+1. **FutureFund donation page:** done. The Donate link points to the school's campaign page, https://calhigh.futurefund.com/store/campaigns/79740-ceramic-website-purchases.
 2. **Admin email:** the final admin email will be provided. The owner's email is used for now.
 
 ## 10. Out of scope (for now)
