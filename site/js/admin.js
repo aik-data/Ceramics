@@ -7,6 +7,17 @@ import {
   DEFAULT_TERMS, termsHtml,
 } from "./util.js";
 
+// Invite and password-reset links come back as admin.html#/set-password#access_token=…
+// (Supabase adds its own "#" after ours). Rewrite that to a single "#" before the
+// Supabase client starts, so it can read the sign-in from the link.
+const AUTH_HASH = location.hash;
+const AUTH_RETURN = /type=(invite|recovery)/.test(AUTH_HASH) || AUTH_HASH.startsWith("#/set-password");
+const AUTH_LINK_FAILED = /error_code=|error_description=/.test(AUTH_HASH);
+{
+  const m = AUTH_HASH.match(/^#\/set-password#(.+)$/);
+  if (m) history.replaceState(null, "", location.pathname + location.search + "#" + m[1]);
+}
+
 const app = document.getElementById("app");
 const dlg = document.getElementById("dlg");
 let api, me, D = null, pollTimer = null, knownOrderIds = null;
@@ -759,10 +770,13 @@ async function start() {
 (async function boot() {
   try {
     api = await getApi();
-    const rawHash = location.hash;
     me = await api.adminSession();
-    if (/type=(invite|recovery)/.test(rawHash) || rawHash.startsWith("#/set-password")) {
-      if (me) return viewSetPassword();
+    if (AUTH_RETURN) {
+      if (me && !AUTH_LINK_FAILED) return viewSetPassword();
+      if (!me) {
+        history.replaceState(null, "", location.pathname + location.search);
+        return viewLogin("", "That link has expired or was already used. Tap “Forgot or need to set your password?” below to get a new one, and open only the newest email.");
+      }
     }
     if (!me) return viewLogin();
     if (me.notAdmin) return viewLogin(); // e.g. the shared family login on this device
